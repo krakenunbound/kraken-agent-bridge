@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.3 (2026-10-17)
+
+- **Install with an agent from the download.** Tell your agent: *Unpack `KrakenAgentBridge-v1.0.3.zip`, read AGENT_INSTALL.md, then install it and get set up.*
+  - `AGENT_INSTALL.md` sits at the top of the zip.
+  - `KrakenAgentBridge/MCP/README.md` is now the one complete document for agents. Its new step 0 finds the FGU data folder, copies the extension in, and handles upgrades (including restarting only the bridge's own daemon). It then sets the agent up, turns the bridge on in a campaign, and verifies.
+  - New steps: moving off the old Claude Bridge, cleanup (tell the user the download can be deleted, then a summary), and uninstall.
+
 ## v1.0.2 (2026-10-17)
 
 - **Agent setup folder:** `KrakenAgentBridge\MCP` ships inside the extension.

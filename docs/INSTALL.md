@@ -1,5 +1,7 @@
 # Install Guide
 
+**Using an agent?** Download the zip and tell it: *Unpack `Downloads\KrakenAgentBridge-v<version>.zip`, read AGENT_INSTALL.md, then install it and get set up.* It follows `KrakenAgentBridge/MCP/README.md`, which covers everything below. This guide is the same install by hand.
+
 ## 1. What you need
 
 - **Windows 10 or 11** with Fantasy Grounds Unity.

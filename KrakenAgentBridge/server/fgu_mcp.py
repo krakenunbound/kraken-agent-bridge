@@ -25,7 +25,7 @@ DATA_FOLDER = os.environ.get(
     "FGU_DATA_FOLDER",
     os.path.join(os.environ.get("APPDATA", ""), "SmiteWorks", "Fantasy Grounds"),
 )
-SERVER_INFO = {"name": "kraken-agent-bridge", "version": "1.0.2"}
+SERVER_INFO = {"name": "kraken-agent-bridge", "version": "1.0.3"}
 
 
 # ---------------------------------------------------------------- daemon

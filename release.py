@@ -61,7 +61,7 @@ def build(tag):
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for path in walk(EXT):
             z.write(path, os.path.relpath(path, REPO).replace("\\", "/"))
-        for f in ("README.md", "CHANGELOG.md"):
+        for f in ("AGENT_INSTALL.md", "README.md", "CHANGELOG.md"):
             z.write(os.path.join(REPO, f), f)
         for d in ("docs", "skills"):
             for path in walk(os.path.join(REPO, d)):

@@ -29,13 +29,20 @@ FGU can't accept incoming connections, so the extension asks a local daemon for 
 
 FGU's Lua sandbox has no `loadstring`, so agents can't run arbitrary Lua. They use a fixed set of commands and call functions only in packages the bridge registers: FGU's API, CoreRPG's managers, common ruleset packages, and any package another extension registers.
 
-## Let your agent set itself up
+## Let your agent install it
 
-Install the extension (step 2 below), then tell your agent:
+Download `KrakenAgentBridge-v<version>.zip` from the [latest release](https://github.com/krakenunbound/kraken-agent-bridge/releases/latest) and tell your agent:
 
-> Go to `%APPDATA%\SmiteWorks\Fantasy Grounds\extensions\KrakenAgentBridge\MCP`, read README.md, install and get set up.
+> Unpack `Downloads\KrakenAgentBridge-v<version>.zip`, read AGENT_INSTALL.md, then install it and get set up.
 
-That folder ships inside the extension. It has a step-by-step setup checklist written for agents: Python, registering the MCP server for whichever client it is, the skill, the startup shortcut, and the steps only you can do in FGU. It also holds the agent guide and the full reference.
+The zip carries one complete set of instructions written for agents ([`KrakenAgentBridge/MCP/README.md`](KrakenAgentBridge/MCP/README.md)):
+- copy the extension into Fantasy Grounds, upgrading an older copy if there is one;
+- register the MCP server for whichever client it is;
+- install the skill and the startup shortcut;
+- the steps only you can do in FGU, then verify;
+- the usage guide.
+
+Afterwards you can delete the zip. The instructions stay with the installed extension, so later you can say: *Go to `%APPDATA%\SmiteWorks\Fantasy Grounds\extensions\KrakenAgentBridge\MCP`, read README.md and get set up.*
 
 ## Quick start
 
@@ -51,7 +58,7 @@ That folder ships inside the extension. It has a step-by-step setup checklist wr
 | --- | --- |
 | [INSTALL.md](docs/INSTALL.md) | Requirements, installing the extension, starting the daemon with Windows, connecting each agent, upgrading from Claude Bridge, uninstalling, troubleshooting |
 | [USAGE.md](docs/USAGE.md) | Every tool and its arguments, recipes, GM and player roles, several FGU copies at once, the HTTP API, registering your extension's packages |
-| [KrakenAgentBridge/MCP](KrakenAgentBridge/MCP/README.md) | The agent setup folder that ships with the extension: point an agent at it and it sets itself up |
+| [KrakenAgentBridge/MCP](KrakenAgentBridge/MCP/README.md) | Install, setup and usage for agents, in one folder that ships with the extension; [AGENT_INSTALL.md](AGENT_INSTALL.md) at the top of the zip points to it |
 | [AGENT_GUIDE.md](docs/AGENT_GUIDE.md) | A guide written for the agent: hand it over, paste it into `AGENTS.md` or `CLAUDE.md`, or install it as the skill in `skills/fgu-bridge` |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 
