@@ -14,6 +14,7 @@
   - maps straight into a campaign (`CampaignDataManager.createImageRecordFromAsset`);
   - finding a module's real record paths (`reference.spells`... in rulebooks), link classes, Lua's truthiness;
   - sequential calls, field types, UTF-8 without a BOM.
+  - character portraits must be square (1:1): ask for square art, or crop it (snippet included), never stretch.
   - `RecordManager` and `RecordAssetManager` are now registered (from FGU's next start).
 - **`fgu_get` takes `fns`:** which of the named functions a package has, without calling any. FGU packages can't be listed from Lua, so `listPackageFunctions` only ever worked on plain tables. `fgu_get` also returns a field's type.
 

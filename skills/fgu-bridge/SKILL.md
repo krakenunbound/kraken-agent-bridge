@@ -340,7 +340,20 @@ Scores, race, class, alignment, name and look are the player's. Ask, or follow t
 
 A character's portrait is an **asset**: an image file FGU has indexed. Assign it the way FGU's portrait picker does:
 
-1. **Make the picture** if the user asked for one (with an image tool you have), or use the file they gave you. Convert it to WebP (section 15).
+1. **Make the picture** if the user asked for one (with an image tool you have), or use the file they gave you.
+   - **Character portraits must be square (1:1).** FGU shows them in square frames, so a tall or wide picture gets squashed or cropped badly.
+   - Ask your image tool for a square image (for example 1024x1024), framed head and shoulders.
+   - If you get a non-square picture, crop it to a square before use. Keep the face, and crop from the bottom of a tall portrait rather than the top. Don't stretch it.
+   - Then convert it to WebP (section 15).
+
+   ```python
+   from PIL import Image
+   im = Image.open("portrait.png").convert("RGB")
+   w, h = im.size; s = min(w, h)
+   left = (w - s) // 2
+   top = 0 if h > w else (h - s) // 2          # tall: keep the top (the face)
+   im.crop((left, top, left + s, top + s)).save("portrait.webp", "WEBP", quality=85, method=6)
+   ```
 2. **Put the file where FGU looks:**
 
    | Folder | Asset name |
@@ -482,7 +495,8 @@ An **image record** (`image.<id>`) is a map or a picture. Its `image` field (typ
 | Asset | Format | Notes |
 | --- | --- | --- |
 | Maps and battle maps | **WebP** | Lossy, quality about 85. |
-| Handouts, scene art, portraits | **WebP** | Lossy, quality about 85. |
+| Handouts, scene art | **WebP** | Lossy, quality about 85. |
+| Character and NPC portraits | **WebP**, **square (1:1)** | Lossy, quality about 85. Crop to a square before use; never stretch (section 9.6). |
 | Tokens (a creature's picture on a map) | **PNG** or **WebP**, with transparency | Both are common. Keep the alpha channel: tokens are usually round with a transparent background. |
 | Module or book cover (`thumbnail.png` in the module root) | **PNG**, named exactly `thumbnail.png` | Not WebP. |
 
