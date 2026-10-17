@@ -1,0 +1,4 @@
+build/
+__pycache__/
+*.pyc
+KrakenAgentBridge/tools/fgshot.png
