@@ -124,7 +124,7 @@ function registerDefaultPackages()
 		NPCManager = NPCManager, ItemManager = ItemManager, WindowManager = WindowManager,
 		DiceManager = DiceManager, StringManager = StringManager, RecordDataManager = RecordDataManager,
 		LibraryData = LibraryData, TokenManager = TokenManager, PartyManager = PartyManager,
-		TableManager = TableManager,
+		TableManager = TableManager, RecordManager = RecordManager, RecordAssetManager = RecordAssetManager,
 		CurrencyManager = CurrencyManager,
 		CalendarManager = CalendarManager,
 		VisionManager = VisionManager, ImageManager = ImageManager,

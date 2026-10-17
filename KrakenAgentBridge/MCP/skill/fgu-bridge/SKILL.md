@@ -98,6 +98,15 @@ What you can and can't do:
 - **You can** read and write the database, open and operate windows, post to chat, type chat commands, and call any function of a **registered package**. `fgu_status` lists them: FGU's own API (`DB`, `Interface`, `Module`, `File`, `Session`, `User`, `Comm`, `Utility`, `Input`), CoreRPG's managers, common ruleset packages, and packages other extensions registered.
 - **FGU packages can't be listed.** You can't ask a package for its functions; `pairs()` doesn't work on them. Learn names from the ruleset's source (section 8). Check that a name exists with `fgu_get {"package":"CharManager","fns":["addInfoDB","addClass"]}` before calling it.
 - **Functions run with the GM's permissions** when you use the `host` role. The `client` role runs as a player: it can change only what that player owns.
+- **Some useful packages may not be registered** (`fgu_call` says "package not registered"). Look for a registered package that wraps the same thing. For example, CoreRPG's `CampaignDataManager.setCharPortrait` forwards to `RecordAssetManager.setCharPortrait`.
+- **Run dependent calls one after another,** not in parallel. A read sent alongside a write can run before the write and show old values. Writes also fire handlers that may finish a moment later, so re-read afterwards.
+- **After the bridge is updated,** restart your client or start a new session, so you get the new tool definitions.
+
+**Lua facts that trip agents up** (read them before reading ruleset source):
+- Only `nil` and `false` are false. `0` and `""` are **true** in Lua, unlike Python or JavaScript. A check like `if not nLevel` does not reject level 0. If a function returns nil, look for a missing node or a wrong argument instead.
+- Lists start at 1, not 0. `#t` is the length.
+- `a.b(c)` and `a:b(c)` differ: the colon passes `a` as the first argument. Bridge calls are always `package.fn(args...)`.
+- `DB.getValue(node, "field", default)` returns the default when the field is missing. A missing field and a field set to the default look the same.
 
 ---
 
@@ -176,7 +185,23 @@ Ask FGU rather than trusting this table: `fgu_call LibraryData.getRootMapping ["
 
 **Module edits.** Module records are read-only. If a record from a module is edited in FGU, the edit is saved in `<data>\campaigns\<campaign>\moduledb\<module>.xml` and overrides the module's own copy for that campaign. This matters when you rebuild a module and FGU keeps showing old data: the moduledb override wins. `Module.revert` drops a campaign's edits to a module; ask the user first.
 
-**Global lookups.** `fgu_call DB.getChildrenGlobal ["spell"]` returns that root's records across the campaign and **all loaded modules**. It covers only that root path: a book that stores its classes somewhere else (`reference.classdata`, say) won't appear. When in doubt, list each loaded module's roots.
+**Global lookups.** `fgu_call DB.getChildrenGlobal ["spell"]` returns that root's records across the campaign and **all loaded modules**. It covers only that root path.
+
+**Many rulebook modules don't use the standard roots.** For example, the 3.5E Player's Handbook keeps its records under:
+- `reference.races`, `reference.classes`, `reference.feats`;
+- `reference.spells`, `reference.equipment`, `reference.skills`.
+
+Its spells are `reference.spells.id-00320@<module>`, not `spell.<id>@<module>`. `getChildrenGlobal ["spell"]` and `LibraryData.getRootMapping` miss them. Find a module's real paths in one of two ways:
+1. **From its library entries:** `fgu_db_get {"path":"library@<module>","depth":5}`. Each entry's `librarylink.recordname` or `recordtype` points at its list.
+2. **From the module file, which is fastest for searching by name:**
+   - A `.mod` is a zip.
+   - Its database is `db.xml`, or `client.xml` for content players may see. Many books have both.
+   - Copy the `.mod` to a scratch folder, unzip it, and search the XML for the record's name.
+   - A record's path is its element path below `<root>`, joined with dots, with any `<category>` elements left out, plus `@<module name>`.
+   - For example, `<root><reference><spells><id-00320><name>Magic Missile` becomes `reference.spells.id-00320@D&D 3.5e Player's Handbook v1`.
+   - Check the path with `fgu_db_get` before using it.
+
+**Link classes.** When a function wants a "class" with a record (`addInfoDB`, `addItemToList`), it means the window class that record opens in, such as `referenceclass`, `referencefeat` or `item`. Find it in the module: any `<link class="..." recordname="...">` or `windowreference` that points at that kind of record, or in the sheet's `onDrop` handler (section 8).
 
 ---
 
@@ -241,30 +266,99 @@ Read the ruleset's source whenever you need to know how something works: which f
 
 ## 9. Characters: reading, making, changing
 
-**Reading.** `fgu_db_list {"path":"charsheet"}`, then `fgu_db_get {"path":"charsheet.id-0000N","depth":3}`. Field names depend on the ruleset; common ones are `name`, `level`, `classes`, `race`, `abilities.<ability>.score`, `hp.total`, `inventorylist`, `skilllist`, `featlist`, `powers` or `spellset`. Read one finished character first to learn the shape.
+**Reading.** `fgu_db_list {"path":"charsheet"}`, then `fgu_db_get {"path":"charsheet.id-0000N","depth":3}`. Field names depend on the ruleset. Common ones:
+- `name`, `level`, `classes`, `race`;
+- `abilities.<ability>.score`, `hp.total`;
+- `inventorylist`, `skilllist`, `featlist`;
+- `powers` or `spellset`.
 
-**Making a character**, in order of preference:
+### 9.1 Before you build: study a finished character
 
-1. **A character creation extension (wizard), if the campaign has one.** Look in `fgu_status` packages for names like `CharWizard...`, or ask the user. A wizard knows the rules of character creation. The user can drive it in its window, or its window can be driven with the `fgu_window_*` tools. Some wizards also have a function that builds a character from a spec. Read its source or documentation.
-2. **The ruleset's own drop functions, which are what dragging does:**
-   1. Create the record: `fgu_db_create_child {"path":"charsheet"}` returns `charsheet.id-0000N`.
-   2. Set the basics with `fgu_db_set`: `name`, ability scores, alignment and so on, using the ruleset's field names.
-   3. Add the race, class, background and so on the way a drag would. Find the sheet's `onDrop` handler (section 8) and call the function it calls. For example, in 3.5E and 5E-style rulesets: `fgu_call {"package":"CharManager","fn":"addInfoDB","args":[{"$node":"charsheet.id-0000N"},"<link class>","<record path>"]}`. The **link class** is the window class of the dragged record, such as `referenceclass` or `reference_race`. Find it in the handler's `if sClass == ...` lines, or in a `windowreference` that links to that record type.
-   4. Some of these functions ask questions in a dialog (choose a skill, choose a subrace). Read the dialog with `fgu_window_list` and `fgu_window_read`, then answer it with `fgu_window_set` and `fgu_window_call`, or ask the user.
-   5. Add equipment (section 10), spells and feats the same way.
-   6. Check the result against the rules:
-      - re-read the sheet;
-      - open it with `fgu_window_open {"class":"charsheet","path":"charsheet.id-0000N"}` and read the computed numbers;
-      - check `fgu_console` for errors.
-3. **Writing fields directly** is the last resort. It skips the ruleset's bookkeeping: a level written into `level` without the class's hit points, saves and features leaves a broken character. Use direct writes only for simple values (name, notes, a corrected score) or when you know exactly what the ruleset expects.
+Find a complete character of the same ruleset, ideally the same class, and read it at depth 3 or 4. It's your template for field names **and field types**.
+- Some fields hold a number. Others hold the *name* of an ability (`"strength"`), or a dice string.
+- Writing the wrong type can break the sheet's scripts. In 3.5E, writing numbers into `attackbonus.melee.ability` caused a script error: that field holds an ability name.
+- Fields a finished character lacks are usually computed by the sheet. Don't invent them.
+- Never copy someone's existing character and edit it into a new one. Leftover links, ids and owner data come along. Build a fresh record.
 
-**Choices that are the user's to make.** Rolled ability scores, race, class, alignment and name all belong to the player. Ask, or follow their spec exactly. If they ask you to roll, roll in FGU so everyone sees it (`fgu_slash {"command":"/die 4d6"}`), and report the results.
+### 9.2 Read the rules for this game first
 
-**Level up.** Use the ruleset's way: often adding the same class again with `addInfoDB`, or a level-up button on the sheet. Find it in the source. Don't just raise a number.
+Open the race and class records you'll use (section 6) and read their text and fields. **Don't bring rules from another edition.** For example, a D&D 3.5e human gets an extra feat and extra skill points, not +2 to an ability score; that's 5e and Pathfinder. Read how the rulebook handles each of these:
+- ability score generation (rolling or point buy, and the budget);
+- racial adjustments and starting hit points;
+- skill points and class skills, feats and bonus feats;
+- spells known and prepared, and bonus spells for a high ability;
+- starting gold or starting kits;
+- languages, alignment limits, deity.
 
-**Owners.** A character belongs to the player who created or claimed it. When the GM makes one, it has no owner until a player picks it in Character Selection.
+If the user gave a method (point buy, rolled), use it. If not, ask, or use the book's standard method and say which.
 
-**Portraits and tokens.** A character's `token` field (type `token`) holds the asset path of its map token.
+### 9.3 Use a character wizard if there is one
+
+Look in `fgu_status` packages for names like `CharWizard...`, or ask the user. A wizard knows the game's creation rules and builds a complete sheet. The user can drive it, or you can drive its window with the `fgu_window_*` tools. Some wizards also have a function that builds a character from a spec; read its source or README. If driving it would take too many steps, use 9.4, but tell the user that a wizard exists.
+
+### 9.4 Build it the way dragging does, in this order
+
+The sheet's own functions do the bookkeeping: hit points, saves, skill points, features, spell slots. They read the character's current scores **when they run**, so the order matters.
+
+1. **Create the record:** `fgu_db_create_child {"path":"charsheet"}` returns `charsheet.id-0000N`. Set `name`.
+2. **Set the ability scores first,** using the ruleset's fields (often `abilities.<ability>.score`). Hit points and skill points are computed from them when the class is added. Set the scores **before** racial adjustments, if the race function applies them itself. Read the race record and the function first, so a bonus isn't applied twice.
+3. **Add the race:** find the sheet's `onDrop` handler (section 8) and call the function it calls, with the link class and the record path. In 3.5E: `fgu_call {"package":"CharManager","fn":"addInfoDB","args":[{"$node":"charsheet.id-0000N"},"referencerace","reference.races.id-000NN@<module>"]}`.
+   - Some races open a dialog (choose a bonus, a subrace, a language). Look with `fgu_window_list` and `fgu_window_read`, then answer with `fgu_window_set` and `fgu_window_call`.
+   - Re-read the scores afterwards.
+4. **Add the class** the same way (`referenceclass` in 3.5E). This adds hit points, base attack, saves, class features, proficiencies, and the spell class for casters. To gain a level, the same call adds one more level of that class.
+5. **Skills:**
+   - Use the ruleset's skill function. In 3.5E, `CharManager.getSkillNode(node, "Spellcraft")` returns the skill row, creating it if needed; then set its `ranks`. The skill name must match the ruleset's own list exactly (`fgu_get {"package":"DataCommon","field":"skilldata"}` in 3.5E). An unknown name returns nil.
+   - **Skills with a specialty are separate rows:** `getSkillNode(node, "Knowledge", "arcana")`, `getSkillNode(node, "Knowledge", "the planes")`. A row named "Knowledge (arcana)" isn't the same thing. Delete any generic "Knowledge" row you created by mistake.
+   - Spend exactly the points the rules give, within the rank limits. Racial or class extras may need adding by hand: check the total against the book.
+6. **Feats and features:** `addInfoDB` with the feat link class (`referencefeat` in 3.5E). Bonus feats from race or class count too. Some class features (a wizard's Scribe Scroll) arrive as text only; check whether the sheet lists them, and add the feat record if the rules make it a feat.
+7. **Spells, for casters:**
+   - The class creates a spell class node, such as `spellset.id-00001` in 3.5E. Its levels live at `levels.level0.spells`, `levels.level1.spells` and so on.
+   - **The level node must exist before you add spells to it.** In 3.5E, `SpellManager.addSpell(<spell record>, <spell class node>, <level>)` returns nil if `levels.level<N>.spells` is missing. Create the missing node with `fgu_db_create_child`, then retry.
+   - Mark prepared spells the way the sheet does (read a prepared spell on the template).
+   - Give exactly the spells the rules allow: spells known or in the spellbook, prepared slots, bonus spells.
+8. **Equipment:**
+   - Use the book's starting gold or kit. If starting gold is rolled, roll it in FGU so it's visible (`fgu_slash {"command":"/die 3d4"}`).
+   - Buy at the listed prices. Add each item with `ItemManager.addItemToList` (section 10), with a count for stackable items.
+   - Items the class grants free cost nothing.
+   - Set the remaining coins the way the template stores them.
+9. **Details:** alignment, deity, age, height, weight, gender, languages, appearance, background, notes, experience. Use the template's field names.
+10. **Portrait** (section 9.6).
+11. **Check everything:**
+    1. Open the sheet with `fgu_window_open {"class":"charsheet","path":"charsheet.id-0000N"}`, so the sheet computes its totals.
+    2. Read the computed numbers with `fgu_window_read`, and compare them with the book by hand: hit points, armor class, saves, attacks, skills, spells per day.
+    3. Read `fgu_console {"errors_only":true}`. A script error usually means a field of the wrong type.
+    4. Fix any differences through the ruleset's functions where possible.
+    5. Report the character to the user, and say what you chose.
+
+**Writing fields directly** is for what no function sets: name, details, notes, a corrected score. A level, class or race written by hand, without the class function, leaves a broken character.
+
+### 9.5 Choices that belong to the player
+
+Scores, race, class, alignment, name and look are the player's. Ask, or follow their spec exactly. When they leave it to you, choose things that suit each other: a wizard with high Intelligence, spells that fit the concept. Say what you chose.
+
+### 9.6 Portraits
+
+A character's portrait is an **asset**: an image file FGU has indexed. Assign it the way FGU's portrait picker does:
+
+1. **Make the picture** if the user asked for one (with an image tool you have), or use the file they gave you. Convert it to WebP (section 15).
+2. **Put the file where FGU looks:**
+
+   | Folder | Asset name |
+   | --- | --- |
+   | `<data>\campaigns\<campaign>\portraits\` (this campaign only) | `campaign/portraits/<file>` |
+   | `<data>\portraits\` (all campaigns) | `portraits/<file>` |
+   | a module's `portraits` folder | `portraits/<file>@<module>` |
+3. **Have FGU rescan:** `fgu_call {"package":"Interface","fn":"refreshAssets"}`. This is the Assets window's refresh button. FGU indexes files at startup, so a file added later isn't found until this runs. No restart is needed.
+4. **Check the name:** `fgu_call {"package":"User","fn":"getPortraitFileList","args":["Campaign"]}`. Use `"Data"` for the shared folder, or the module's display name. `User.getPortraitDirectoryList [""]` lists the folders. Use the exact name it returns.
+5. **Assign it:** `fgu_call {"package":"CampaignDataManager","fn":"setCharPortrait","args":[{"$node":"charsheet.id-0000N"},"campaign/portraits/<file>"]}`. This is what the picker calls. It:
+   - copies the picture into the campaign's portrait cache (the extensionless `portraits\id-0000N` files you may see there);
+   - sets the `portrait` field;
+   - sets the map token to `portrait_<id>_token`, if the character had no token.
+
+   Don't write the `portrait` or `token` fields yourself, and never overwrite files in the cache.
+6. Re-open the sheet and check `fgu_console` for "missing asset" warnings.
+
+Don't make a module just to deliver one picture. A brand-new module folder may not be seen until FGU restarts, while `refreshAssets` works at once.
 
 ---
 
@@ -381,7 +475,7 @@ An **image record** (`image.<id>`) is a map or a picture. Its `image` field (typ
 - `bitmap` is a path inside the module.
 - `gridsize` is pixels per square: measure the picture's squares.
 - A picture (portrait, handout art) is an image record without a grid.
-- The `type="image"` value can't be written with `fgu_db_set`. Copy the layout of an existing image record in the same FGU version when unsure.
+- `fgu_db_set` can't write the `image` type, but `fgu_call DB.setValue` can: `["image.id-0000N","image","image","campaign/images/inn.webp"]` takes an image file's asset name.
 
 **Image formats: convert art to WebP before you use it.** FGU prefers WebP for maps, handouts, portraits and other art. It's much smaller than PNG or JPG for the same picture, and FGU sends every image to every player who opens it, so size matters. Of the art in a typical set of installed modules, most is WebP.
 
@@ -411,7 +505,12 @@ Or with Google's `cwebp` tool: `cwebp -q 85 map.png -o map.webp`.
 
 **How to make a map, in order of preference:**
 1. **In a module** (section 16): put the picture in the module's `images` folder and write the record in `db.xml` as above. This is reliable and repeatable.
-2. **In the campaign, through FGU's own interface:** the user puts the picture in `<data>\campaigns\<campaign>\images\`, or in `<data>\images\` for all campaigns. In FGU it then appears under **Assets**, and dragging it into the **Images & Maps** list makes the record. Tell the user the steps.
+2. **Straight into the campaign:**
+   1. Convert the picture to WebP.
+   2. Put it in `<data>\campaigns\<campaign>\images\`. Its asset name is then `campaign/images/<file>`; for `<data>\images\`, shared by all campaigns, it's `images/<file>`.
+   3. Rescan with `fgu_call {"package":"Interface","fn":"refreshAssets"}`.
+   4. Make the record: `fgu_call {"package":"CampaignDataManager","fn":"createImageRecordFromAsset","args":["campaign/images/inn.webp",false]}`. This is what dropping an asset into the Images list does: it creates the image record, named after the file. Pass `true` to open it, but ask first, because it opens a window on the user's screen.
+   5. Find the new record with `fgu_db_list {"path":"image"}`. Set the grid in the map window, or ask the user to; the grid is part of the `image` value.
 3. You don't draw the picture inside FGU. Get it from the user, from a map pack module they own, or from an image tool you have. Never use art the user hasn't provided or asked you to make.
 
 **Tokens** are a creature's picture on a map. NPC and character records have a `token` field (`tokens/goblin.png@<module>`). Placing tokens on a map is done by the GM dragging from the tracker, or by functions of the map's `image` control. Read the map window with `fgu_window_read`, then check with `fgu_window_has` before trying anything. Prefer asking the user.
@@ -487,7 +586,8 @@ MyModule\
 - **Copy field names from an existing record of the same type in the same ruleset** (`fgu_db_get` on one, or another module's `db.xml`). Records with wrong field names load but don't work.
 - The `library` section makes the module appear in the Library with one entry per record type. A book entry links `reference_manual` to `reference.refmanualindex@<module>` (section 7 shows the book layout).
 - Images, tokens and portraits are files in the module folder, referenced as `images/x.png`. From outside the module the reference is `images/x.png@My Module`.
-- **Escape XML:** `&` as `&amp;`, `<` as `&lt;`. Save files as UTF-8.
+- **Escape XML:** `&` as `&amp;`, `<` as `&lt;`. Save files as **UTF-8 without a BOM**. PowerShell's `Set-Content -Encoding utf8` adds a BOM on Windows PowerShell 5, so write the files with Python or another tool that doesn't.
+- **A brand-new module folder may not appear** in FGU's module list until FGU restarts. Plan for that, tell the user, and don't build a module just to deliver one image (use `refreshAssets`, section 15).
 - **To pack it:** zip the folder's contents (not the folder itself) and rename the zip `My Module.mod`. A folder module works too, and is easier while you build.
 - **Load it:**
   1. In the campaign, open **Library > Modules** (or `fgu_call Module.activate ["My Module"]` once the user agrees).
@@ -545,14 +645,17 @@ Every spell loaded:        fgu_call {"package":"DB","fn":"getChildrenGlobal","ar
 Record types / roots:      fgu_call LibraryData.getRecordTypes ; LibraryData.getRootMapping ["story"]
 Does a function exist:     fgu_get {"package":"CharManager","fns":["addInfoDB","addClass"]}
 New character:             fgu_db_create_child {"path":"charsheet"}  then  fgu_db_set {"path":"charsheet.id-0000N.name","type":"string","value":"Ainsley"}
-Add a class (3.5E/5E):     fgu_call {"package":"CharManager","fn":"addInfoDB","args":[{"$node":"charsheet.id-0000N"},"referenceclass","class.fighter@<module>"]}
-Give an item:              fgu_call {"package":"ItemManager","fn":"addItemToList","args":["charsheet.id-0000N.inventorylist","item","item.longsword@<module>"]}
+Add a class (3.5E):        fgu_call {"package":"CharManager","fn":"addInfoDB","args":[{"$node":"charsheet.id-0000N"},"referenceclass","reference.classes.id-000NN@<module>"]}
+Give an item:              fgu_call {"package":"ItemManager","fn":"addItemToList","args":["charsheet.id-0000N.inventorylist","item","reference.equipment.id-000NN@<module>"]}
 NPC onto the tracker:      fgu_call {"package":"CombatRecordManager","fn":"onRecordTypeEvent","args":["npc",{"sRecord":"npc.goblin@<module>"}]}
 Target:                    fgu_call {"package":"TargetingManager","fn":"addCTTarget","args":[{"$node":"<source CT>"},{"$node":"<target CT>"}]}
 Add an effect:             fgu_call {"package":"EffectManager","fn":"addEffectByText","args":[{"$node":"combattracker.list.id-00002"},"Blessed; ATK: 1"]}
 Next turn:                 fgu_call {"package":"CombatManager","fn":"nextActor"}
 Plain roll:                fgu_slash {"command":"/die 1d20+3"}
 Press a sheet button:      fgu_window_call {"class":"charsheet","path":"charsheet.id-00001","sub":["main"],"control":"<button>","fn":"onButtonPress"}
+Rescan new files:          fgu_call {"package":"Interface","fn":"refreshAssets"}
+Portrait:                  fgu_call {"package":"CampaignDataManager","fn":"setCharPortrait","args":[{"$node":"charsheet.id-0000N"},"campaign/portraits/<file>.webp"]}
+Map from a file:           fgu_call {"package":"CampaignDataManager","fn":"createImageRecordFromAsset","args":["campaign/images/<file>.webp",false]}
 Story text:                fgu_db_set {"path":"encounter.id-00002.text","type":"formattedtext","value":"<p>...</p>"}
 Set an option:             fgu_call {"package":"OptionsManager","fn":"setOption","args":["<option key>","<value>"]}
 What happened:             fgu_chat_log {"lines":10}, then fgu_console {"errors_only":true}

@@ -8,6 +8,13 @@
   - New steps: moving off the old Claude Bridge, cleanup (tell the user the download can be deleted, then a summary), and uninstall.
 - **The agent guide and skill are now a full manual** (patched into v1.0.3 the same day). They assume the agent knows nothing about Fantasy Grounds and cover: how FGU is put together, the database and modules, finding anything, looking up rules in the loaded books, reading a ruleset's source, making and levelling characters, items, combat and effects, rolling through the sheet, windows, story and tables, maps, making modules, debugging, and etiquette. Every API it names was checked against CoreRPG and a live campaign.
 - **Image formats for agents that build assets:** convert maps, handouts and portraits to WebP before use; tokens PNG or WebP with transparency; module covers must be `thumbnail.png`. Includes a tested Pillow snippet and a `cwebp` line.
+- **Lessons from a real build** (Grok making a 3.5e wizard), patched in the same day:
+  - a character build order and checklist (scores before race and class, skill specialties, spell level nodes, starting gold, verify on the open sheet);
+  - portraits the way FGU's picker does it (`Interface.refreshAssets`, `User.getPortraitFileList`, `CampaignDataManager.setCharPortrait`);
+  - maps straight into a campaign (`CampaignDataManager.createImageRecordFromAsset`);
+  - finding a module's real record paths (`reference.spells`... in rulebooks), link classes, Lua's truthiness;
+  - sequential calls, field types, UTF-8 without a BOM.
+  - `RecordManager` and `RecordAssetManager` are now registered (from FGU's next start).
 - **`fgu_get` takes `fns`:** which of the named functions a package has, without calling any. FGU packages can't be listed from Lua, so `listPackageFunctions` only ever worked on plain tables. `fgu_get` also returns a field's type.
 
 ## v1.0.2 (2026-10-17)
