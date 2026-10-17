@@ -378,6 +378,32 @@ An **image record** (`image.<id>`) is a map or a picture. Its `image` field (typ
 - A picture (portrait, handout art) is an image record without a grid.
 - The `type="image"` value can't be written with `fgu_db_set`. Copy the layout of an existing image record in the same FGU version when unsure.
 
+**Image formats: convert art to WebP before you use it.** FGU prefers WebP for maps, handouts, portraits and other art. It's much smaller than PNG or JPG for the same picture, and FGU sends every image to every player who opens it, so size matters. Of the art in a typical set of installed modules, most is WebP.
+
+| Asset | Format | Notes |
+| --- | --- | --- |
+| Maps and battle maps | **WebP** | Lossy, quality about 85. |
+| Handouts, scene art, portraits | **WebP** | Lossy, quality about 85. |
+| Tokens (a creature's picture on a map) | **PNG** or **WebP**, with transparency | Both are common. Keep the alpha channel: tokens are usually round with a transparent background. |
+| Module or book cover (`thumbnail.png` in the module root) | **PNG**, named exactly `thumbnail.png` | Not WebP. |
+
+To convert, with Python and Pillow (`python -m pip install pillow`):
+
+```python
+from PIL import Image
+im = Image.open("map.png")
+if im.mode not in ("RGB", "RGBA"):
+    im = im.convert("RGBA" if "transparency" in im.info else "RGB")
+im.save("map.webp", "WEBP", quality=85, method=6)              # maps, handouts, portraits
+# a token, keeping its transparency without loss:
+Image.open("goblin.png").convert("RGBA").save("goblin.webp", "WEBP", lossless=True)
+```
+
+Or with Google's `cwebp` tool: `cwebp -q 85 map.png -o map.webp`.
+- After converting, point the record at the new file (`images/map.webp`), and delete the original from the module so it doesn't ship twice.
+- **Measure the map's grid** (pixels per square, for `gridsize`) on the final image. If you resize while converting, the grid changes too.
+- Keep the user's originals. Convert copies.
+
 **How to make a map, in order of preference:**
 1. **In a module** (section 16): put the picture in the module's `images` folder and write the record in `db.xml` as above. This is reliable and repeatable.
 2. **In the campaign, through FGU's own interface:** the user puts the picture in `<data>\campaigns\<campaign>\images\`, or in `<data>\images\` for all campaigns. In FGU it then appears under **Assets**, and dragging it into the **Images & Maps** list makes the record. Tell the user the steps.
@@ -395,8 +421,8 @@ A module is a folder or zip in `<data>\modules\` with:
 MyModule\
   definition.xml     name, author, ruleset
   db.xml             the records
-  thumbnail.png      optional: the picture in the module list
-  images\  tokens\   optional: files that records point to
+  thumbnail.png      optional: the cover in the module list; must be PNG, named exactly this
+  images\  tokens\   optional: files that records point to; art in WebP (section 15)
 ```
 
 **definition.xml:**
