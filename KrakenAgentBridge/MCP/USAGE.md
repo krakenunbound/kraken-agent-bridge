@@ -15,7 +15,7 @@ Every tool takes an optional `role` (see [Roles](#roles-gm-players-and-several-c
 | `fgu_db_create_child` | `path`, `name`?, `type`? | Create a node. Without `name`, FGU assigns an id. Returns the path. |
 | `fgu_db_delete` | `path` | Delete a node and everything under it. |
 | `fgu_call` | `package`, `fn`, `args` ([]), `timeout` (30) | Call `package.fn(args...)` inside FGU: `CombatRecordManager.onRecordTypeEvent`, `OptionsManager.setOption`, a ruleset's own packages. Only registered packages are reachable; `fgu_status` lists them. |
-| `fgu_get` | `package`, `field` | Read a non-function field of a package, e.g. `DataCommon.abilities`. |
+| `fgu_get` | `package`, `field`, or `package`, `fns` | Read a package field (its value and type), e.g. `DataCommon.abilities`. Or pass `fns`, a list of names, to learn which functions the package has without calling any. FGU packages can't be listed, so check names you found in the ruleset's source. |
 | `fgu_window_open` | `class`, `path` | Open a window: class `charsheet`, path `charsheet.id-00001`. |
 | `fgu_window_list` | | The open windows (class and path). |
 | `fgu_window_read` | `class`, `path`, `sub`, `row` / `list_control` + `row_index` / `list_path` | A window's controls: name, visible, value, subwindow class, list rows and their paths. |
@@ -101,7 +101,7 @@ end
 
 `ClaudeBridge.registerPackage` (the old name) works too. Registering costs nothing when the bridge isn't loaded: the `if` skips it.
 
-`AgentBridge.listPackageFunctions("MyManager")` lists a package's functions without reading its source.
+To check whether a package has a function, use `fgu_get {"package":"MyManager","fns":["doThing"]}`. FGU's packages (CoreRPG's managers, a ruleset's scripts) can't be listed from Lua, so `AgentBridge.listPackageFunctions` only works for packages that are plain Lua tables.
 
 ## HTTP API
 
@@ -125,7 +125,7 @@ The reply is JSON, either `{"ok": true, "data": ...}` or `{"ok": false, "error":
 | `db_create_child` | `path`, `name`, `type` | `fgu_db_create_child` |
 | `db_delete` | `path` | `fgu_db_delete` |
 | `call` | `package`, `fn`, `args` | `fgu_call` |
-| `get` | `package`, `field` | `fgu_get` |
+| `get` | `package`, `field` or `fns` | `fgu_get` |
 | `window_open`, `window_close`, `window_list`, `window_read`, `window_set`, `window_call`, `window_has` | as the tools | `fgu_window_*` |
 | `chat` | `text` | `fgu_chat` |
 

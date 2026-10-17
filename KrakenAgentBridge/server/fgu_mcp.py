@@ -346,11 +346,14 @@ TOOLS = [
     },
     {
         "name": "fgu_get",
-        "description": "Read a non-function field of a registered package, e.g. DataCommon.dmgtypes.",
+        "description": "Read a field of a registered package, e.g. DataCommon.abilities (returns value and type; a function's value is empty). "
+                       "Or pass fns (a list of names) to learn which of them the package defines, without calling any: "
+                       "FGU packages can't be listed, so check names you found in the ruleset's source.",
         "inputSchema": {"type": "object", "properties": {
             "role": ROLE_PROP,
             "package": {"type": "string"}, "field": {"type": "string"},
-        }, "required": ["package", "field"]},
+            "fns": {"type": "array", "items": {"type": "string"}, "description": "Names to check, e.g. [\"addInfoDB\", \"rest\"]."},
+        }, "required": ["package"]},
     },
     {
         "name": "fgu_window_open",

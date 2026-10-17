@@ -749,7 +749,20 @@ function tCommands.get(a)
 	if not tPackage then
 		return { error = "package not registered: " .. tostring(a.package) };
 	end
-	return { value = tPackage[a.field or ""] };
+	-- Package tables can't be listed with pairs() in FGU, so a.fns asks
+	-- which of the given names exist (and their type) without calling them.
+	if type(a.fns) == "table" then
+		local t = {};
+		for _, sName in ipairs(a.fns) do
+			local bOK, v = pcall(function() return tPackage[sName]; end);
+			if bOK and v ~= nil then
+				t[sName] = type(v);
+			end
+		end
+		return { has = t };
+	end
+	local v = tPackage[a.field or ""];
+	return { value = v, type = type(v) };
 end
 
 function tCommands.chat(a)
