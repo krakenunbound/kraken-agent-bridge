@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.2 (2026-10-17)
+
+- **Agent setup folder:** `KrakenAgentBridge\MCP` ships inside the extension.
+  - Its `README.md` is a step-by-step checklist written for agents: check Python, register the `fgu` MCP server for whichever client the agent is (Claude Code, Codex, Gemini, Cursor, Claude Desktop, VS Code, or none), install the skill, add the startup shortcut, then the steps only the user can do in FGU, and verify.
+  - It also holds `AGENT_GUIDE.md`, `USAGE.md` and the skill, copied from `docs/` by `release.py`, so they stay in step.
+  - Tell your agent: *Go to `%APPDATA%\SmiteWorks\Fantasy Grounds\extensions\KrakenAgentBridge\MCP`, read README.md, install and get set up.*
+- **Agent guide:** an agent without the `fgu_*` tools is pointed at that folder to set itself up.
+
 ## v1.0.1 (2026-10-17)
 
 Clearer connection help for agents.

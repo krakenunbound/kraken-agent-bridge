@@ -37,7 +37,25 @@ def walk(base):
                 yield os.path.join(root, n)
 
 
+def sync_mcp():
+    """Copy the agent docs into KrakenAgentBridge/MCP and rebuild the skill from AGENT_GUIDE.md,
+    so the setup folder that ships with the extension never drifts from docs/."""
+    mcp = os.path.join(EXT, "MCP")
+    for name in ("AGENT_GUIDE.md", "USAGE.md"):
+        shutil.copyfile(os.path.join(REPO, "docs", name), os.path.join(mcp, name))
+    skill = os.path.join(REPO, "skills", "fgu-bridge", "SKILL.md")
+    with open(skill, encoding="utf-8", newline="") as f:
+        front = f.read().split("---\n", 2)[1]
+    with open(os.path.join(REPO, "docs", "AGENT_GUIDE.md"), encoding="utf-8", newline="") as f:
+        guide = f.read()
+    with open(skill, "w", encoding="utf-8", newline="") as f:
+        f.write("---\n" + front + "---\n\n" + guide)
+    os.makedirs(os.path.join(mcp, "skill", "fgu-bridge"), exist_ok=True)
+    shutil.copyfile(skill, os.path.join(mcp, "skill", "fgu-bridge", "SKILL.md"))
+
+
 def build(tag):
+    sync_mcp()
     out = os.path.join(REPO, "build", f"KrakenAgentBridge-{tag}.zip")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
@@ -65,6 +83,7 @@ def install():
 def main():
     args = list(sys.argv[1:])
     if "--install" in args:
+        sync_mcp()
         install()
         return
     build_only = "--build-only" in args

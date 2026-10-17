@@ -9,7 +9,7 @@ You can read and operate the user's running Fantasy Grounds Unity (FGU) campaign
 
 ## Connecting
 
-**1. Do you have the tools?** If you have `fgu_status` and the other `fgu_*` tools, go to step 2. If not, the bridge isn't registered with you. Tell the user, and give them the line for their client from the install guide (docs/INSTALL.md, section 4): a **stdio** MCP server named `fgu` that runs
+**1. Do you have the tools?** If you have `fgu_status` and the other `fgu_*` tools, go to step 2. If not, the bridge isn't registered with you. If you can run commands and edit files, set yourself up: follow `MCP\README.md` in the extension folder (`%APPDATA%\SmiteWorks\Fantasy Grounds\extensions\KrakenAgentBridge\MCP\README.md`). Otherwise tell the user what to add for their client (docs/INSTALL.md, section 4): a **stdio** MCP server named `fgu` that runs
 
 ```text
 python "<FGU data folder>\extensions\KrakenAgentBridge\server\fgu_mcp.py"
@@ -17,7 +17,7 @@ python "<FGU data folder>\extensions\KrakenAgentBridge\server\fgu_mcp.py"
 
 The data folder is usually `%APPDATA%\SmiteWorks\Fantasy Grounds`. Most clients need a restart or a new session after it's added. Until then, you can still use the bridge without MCP:
 - **Command line:** `python "<FGU data folder>\extensions\KrakenAgentBridge\tools\fgu.py" <tool> "<json args>"` runs the same tools.
-- **HTTP:** `POST http://127.0.0.1:47111/cmd` with `{"cmd","args","timeout","role"}`, `GET /status`. The API is in docs/USAGE.md.
+- **HTTP:** `POST http://127.0.0.1:47111/cmd` with `{"cmd","args","timeout","role"}`, `GET /status`. The API is in USAGE.md (in `MCP\` or `docs\`).
 
 **2. Call `fgu_status`, every time, before anything else.** It starts the local daemon if it isn't running, then reports whether FGU is polling (`connected`), the ruleset, the campaign folder, the live channels and the packages you can call.
 

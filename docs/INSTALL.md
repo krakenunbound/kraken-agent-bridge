@@ -22,6 +22,7 @@
      extension.xml
      scripts\bridge.lua
      scripts\compat_claudebridge.lua
+     MCP\README.md            (agent setup checklist, plus AGENT_GUIDE.md, USAGE.md, skill\)
      server\fgu_bridge_daemon.py
      server\fgu_mcp.py
      server\install_startup.py
@@ -44,6 +45,8 @@
 If the chat says nothing, type `/agentbridge` after the daemon is up to reconnect.
 
 ## 4. Connect your agent (MCP)
+
+**The short way:** an agent that can run commands can do this section itself. Tell it: *Go to `%APPDATA%\SmiteWorks\Fantasy Grounds\extensions\KrakenAgentBridge\MCP`, read README.md, install and get set up.* The rest of this section is the same setup by hand.
 
 Every MCP client needs the same thing: a **stdio** server named `fgu` that runs:
 

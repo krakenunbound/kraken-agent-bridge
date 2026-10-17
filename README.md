@@ -29,6 +29,14 @@ FGU can't accept incoming connections, so the extension asks a local daemon for 
 
 FGU's Lua sandbox has no `loadstring`, so agents can't run arbitrary Lua. They use a fixed set of commands and call functions only in packages the bridge registers: FGU's API, CoreRPG's managers, common ruleset packages, and any package another extension registers.
 
+## Let your agent set itself up
+
+Install the extension (step 2 below), then tell your agent:
+
+> Go to `%APPDATA%\SmiteWorks\Fantasy Grounds\extensions\KrakenAgentBridge\MCP`, read README.md, install and get set up.
+
+That folder ships inside the extension. It has a step-by-step setup checklist written for agents: Python, registering the MCP server for whichever client it is, the skill, the startup shortcut, and the steps only you can do in FGU. It also holds the agent guide and the full reference.
+
 ## Quick start
 
 1. Install Python 3.9 or newer (Windows). Nothing else is needed: the bridge uses only the standard library.
@@ -43,6 +51,7 @@ FGU's Lua sandbox has no `loadstring`, so agents can't run arbitrary Lua. They u
 | --- | --- |
 | [INSTALL.md](docs/INSTALL.md) | Requirements, installing the extension, starting the daemon with Windows, connecting each agent, upgrading from Claude Bridge, uninstalling, troubleshooting |
 | [USAGE.md](docs/USAGE.md) | Every tool and its arguments, recipes, GM and player roles, several FGU copies at once, the HTTP API, registering your extension's packages |
+| [KrakenAgentBridge/MCP](KrakenAgentBridge/MCP/README.md) | The agent setup folder that ships with the extension: point an agent at it and it sets itself up |
 | [AGENT_GUIDE.md](docs/AGENT_GUIDE.md) | A guide written for the agent: hand it over, paste it into `AGENTS.md` or `CLAUDE.md`, or install it as the skill in `skills/fgu-bridge` |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 
