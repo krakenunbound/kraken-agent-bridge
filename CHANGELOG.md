@@ -16,6 +16,7 @@
   - sequential calls, field types, UTF-8 without a BOM.
   - character portraits must be square (1:1): ask for square art, or crop it (snippet included), never stretch.
   - `RecordManager` and `RecordAssetManager` are now registered (from FGU's next start).
+- **README rewritten:** what it does, what it can and can't do, installing with an agent or by hand; project image.
 - **`fgu_get` takes `fns`:** which of the named functions a package has, without calling any. FGU packages can't be listed from Lua, so `listPackageFunctions` only ever worked on plain tables. `fgu_get` also returns a field's type.
 
 ## v1.0.2 (2026-10-17)
