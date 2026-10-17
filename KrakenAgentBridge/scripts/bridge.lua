@@ -12,7 +12,7 @@
 -- "call" reaches functions only in the packages listed in tPackages (or
 -- added with AgentBridge.registerPackage; the old name ClaudeBridge still works).
 
-local VERSION = "1.0";
+local VERSION = "1.0.1";
 local BASE = "http://127.0.0.1:47111";
 local CHUNK = 12000;
 

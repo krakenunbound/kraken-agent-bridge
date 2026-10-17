@@ -57,9 +57,8 @@ def build(tag):
 def install():
     data = os.environ.get("FGU_DATA_FOLDER") or os.path.join(os.environ.get("APPDATA", ""), "SmiteWorks", "Fantasy Grounds")
     dest = os.path.join(data, "extensions", "KrakenAgentBridge")
-    if os.path.isdir(dest):
-        shutil.rmtree(dest)
-    shutil.copytree(EXT, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "fgshot.png"))
+    # Copy over in place: a running daemon holds its server folder open, so it can't be deleted first.
+    shutil.copytree(EXT, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "fgshot.png"), dirs_exist_ok=True)
     print(f"[install] {dest}")
 
 

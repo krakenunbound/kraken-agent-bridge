@@ -7,7 +7,7 @@ Kraken Agent Bridge is a Fantasy Grounds Unity (FGU) extension plus a small loca
 - **MCP clients**: Claude Code, Claude Desktop, OpenAI Codex CLI, Gemini CLI, Cursor, VS Code, or anything else that speaks the Model Context Protocol. The bridge ships a standard stdio MCP server.
 - **Everything else**: any program that can send HTTP to `127.0.0.1`, or run a command line. A script, a bot, or an agent without MCP can use the same commands.
 
-![FGU chat: the bridge connecting, an agent's message, and a plain-HTTP message](docs/images/chat-connected.png)
+![FGU chat: the bridge connecting and reconnecting, then messages sent by an agent and by plain HTTP](docs/images/chat-connected.png)
 
 *Formerly "Claude Bridge". It was always agent-agnostic underneath; the new name says so. Extensions written for the old name keep working.*
 

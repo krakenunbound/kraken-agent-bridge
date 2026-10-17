@@ -2,18 +2,29 @@
 
 You can read and operate the user's running Fantasy Grounds Unity (FGU) campaign through the `fgu_*` MCP tools of the Kraken Agent Bridge. It works with any ruleset (CoreRPG, 5E, 3.5E, PFRPG, AD&D 2E, and others).
 
-If your environment has no MCP:
-- **Command line:** run `python "<FGU data folder>\extensions\KrakenAgentBridge\tools\fgu.py" <tool> "<json args>"`.
-- **HTTP:** send requests to `http://127.0.0.1:47111`. The API is in docs/USAGE.md.
+## Connecting
 
-## First step, every time
+**1. Do you have the tools?** If you have `fgu_status` and the other `fgu_*` tools, go to step 2. If not, the bridge isn't registered with you. Tell the user, and give them the line for their client from the install guide (docs/INSTALL.md, section 4): a **stdio** MCP server named `fgu` that runs
 
-Call `fgu_status`. It reports whether FGU is polling (`connected`), the ruleset, the campaign folder, the live channels, and the packages you can call. If it isn't connected:
+```text
+python "<FGU data folder>\extensions\KrakenAgentBridge\server\fgu_mcp.py"
+```
 
-1. Is FGU running with a campaign open? The extension only runs inside a campaign.
-2. Is **Kraken Agent Bridge** ticked in that campaign's extension list in the FGU launcher?
-3. Did FGU show an **Open URL** prompt for `http://127.0.0.1:47111/poll...`? The **user** must click **Yes To All**, once per FGU launch. Ask them. Never click permission prompts for them.
-4. If it was connected and dropped (for example after the local server restarted), ask the user to type `/agentbridge` in FGU's chat.
+The data folder is usually `%APPDATA%\SmiteWorks\Fantasy Grounds`. Most clients need a restart or a new session after it's added. Until then, you can still use the bridge without MCP:
+- **Command line:** `python "<FGU data folder>\extensions\KrakenAgentBridge\tools\fgu.py" <tool> "<json args>"` runs the same tools.
+- **HTTP:** `POST http://127.0.0.1:47111/cmd` with `{"cmd","args","timeout","role"}`, `GET /status`. The API is in docs/USAGE.md.
+
+**2. Call `fgu_status`, every time, before anything else.** It starts the local daemon if it isn't running, then reports whether FGU is polling (`connected`), the ruleset, the campaign folder, the live channels and the packages you can call.
+
+**3. If it isn't connected,** the result has a `how_to_connect` list. Work through it with the user:
+
+1. Fantasy Grounds must be running with a campaign open. The extension runs only inside a campaign.
+2. **Kraken Agent Bridge** must be ticked in that campaign's extension list in the FGU launcher. Ticking it needs the campaign restarted.
+3. FGU shows an **Open URL** prompt for `http://127.0.0.1:47111/poll...`. The **user** clicks **Yes To All**, once per FGU launch. Ask them. Never click permission prompts for them.
+4. If FGU was open before the daemon started, or chat says *Agent bridge: reconnecting*, the user types `/agentbridge` in FGU's chat.
+5. Call `fgu_status` again. When it works, FGU's chat says **Agent bridge: connected (host, localhost:47111)**.
+
+A tool call that times out says the same thing. Don't retry in a loop; ask the user.
 
 ## How it works (so you can reason about failures)
 

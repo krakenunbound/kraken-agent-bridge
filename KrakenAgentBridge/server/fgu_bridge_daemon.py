@@ -124,8 +124,8 @@ def run_command(cmd, args, timeout, role):
             st = role_status(role)
         hint = ""
         if not st["connected"]:
-            hint = (f" No {role} Fantasy Grounds instance is polling: load the campaign with the Kraken Agent Bridge extension"
-                    " (a player client must also allow the URL prompt), or type /agentbridge.")
+            hint = (f" No {role} Fantasy Grounds instance is polling. Ask the user to open the campaign with Kraken Agent Bridge"
+                    " ticked, click Yes To All on FGU's Open URL prompt, or type /agentbridge in FGU's chat; then call fgu_status.")
         return {"ok": False, "error": f"timed out after {timeout}s waiting for the {role}.{hint}"}
     with lock:
         waiters.pop(cid, None)

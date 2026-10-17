@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.1 (2026-10-17)
+
+Clearer connection help for agents.
+
+- **`fgu_status` says how to connect.** When FGU isn't polling, its result has a `how_to_connect` list: open the campaign with the extension ticked, click **Yes To All**, or type `/agentbridge`.
+- **Fuller MCP instructions.** Agents get the connection steps, the first calls to make and the roles when they connect, before reading any guide.
+- **Timeout messages** tell the agent what to ask the user, then to call `fgu_status` again.
+- **Agent guide and skill:** a new *Connecting* section, including what to do when the `fgu_*` tools are missing (register the MCP server, or use the command line or HTTP meanwhile).
+- README screenshot from a real session.
+
 ## v1.0 (2026-10-17)
 
 First public release, under a new name: **Kraken Agent Bridge**. It was "Claude Bridge" 0.5 and used privately. It was never tied to one AI; the name now says so.

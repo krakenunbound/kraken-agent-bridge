@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
 <root version="3.0" release="1">
-	<announcement text="Kraken Agent Bridge v1.0 - lets an AI agent drive this campaign through 127.0.0.1:47111; /agentbridge reconnects" font="emotefont" />
+	<announcement text="Kraken Agent Bridge v1.0.1 - lets an AI agent drive this campaign through 127.0.0.1:47111; /agentbridge reconnects" font="emotefont" />
 	<properties>
 		<name>Kraken Agent Bridge</name>
-		<version>1.0</version>
+		<version>1.0.1</version>
 		<author>The Kraken</author>
 		<description>Lets an AI agent (any MCP client, or any program that speaks HTTP) read and drive this campaign through a local server on 127.0.0.1:47111. Works with any ruleset. Formerly Claude Bridge.</description>
 	</properties>
