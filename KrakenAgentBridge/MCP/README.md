@@ -90,7 +90,7 @@ args = ['C:\Users\<name>\AppData\Roaming\SmiteWorks\Fantasy Grounds\extensions\K
 
 **VS Code** (`.vscode\mcp.json` or the user MCP configuration): the same, but under `"servers"` and with `"type": "stdio"`.
 
-**Any other MCP client:** transport stdio, the command and argument above. The server speaks plain JSON-RPC MCP and lists 20 tools.
+**Any other MCP client:** transport stdio, the command and argument above. The server speaks plain JSON-RPC MCP and lists 34 tools.
 
 **No MCP at all:** skip this step. Run the same tools from a shell with `"<python>" "<bridge>\tools\fgu.py" <tool> "<json args>"` (for example `fgu_status`), or use HTTP on `http://127.0.0.1:47111`, described in `USAGE.md`.
 

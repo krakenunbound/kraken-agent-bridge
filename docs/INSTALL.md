@@ -145,7 +145,7 @@ Add to `.vscode\mcp.json` in your workspace, or to your user MCP configuration:
 
 ### Any other MCP client
 
-Use the same three facts: transport **stdio**, command **`python`**, argument **the path to `fgu_mcp.py`**. The server speaks plain JSON-RPC MCP and lists 20 tools named `fgu_*`.
+Use the same three facts: transport **stdio**, command **`python`**, argument **the path to `fgu_mcp.py`**. The server speaks plain JSON-RPC MCP and lists 34 tools named `fgu_*`.
 
 ### Teach the agent the bridge
 
@@ -187,6 +187,16 @@ This adds **Kraken Agent Bridge daemon** to your Startup folder (`shell:startup`
 1. FGU's chat shows **Agent bridge: connected (host, localhost:47111)**.
 2. `curl -s http://127.0.0.1:47111/status` shows `"connected": true`.
 3. Ask your agent to call `fgu_status`. It reports the ruleset, the campaign folder and the packages it can call.
+
+## 7b. The @ai chat assistant (optional)
+
+To let players and the GM ask the AI from FGU's chat (`@ai what does prone do?`, or `/ai ...` privately), run the listener with the agent you already use. There is no default:
+
+```text
+python "%APPDATA%\SmiteWorks\Fantasy Grounds\extensions\KrakenAgentBridge\servergu_listener.py" --agent claude
+```
+
+`--agent` is `claude`, `codex`, `gemini`, `grok` (each must be installed and logged in; Grok also needs the `fgu` server in its own config) or `custom`. Or ask your agent to call `fgu_listener` with `action: "start"`. The choice and settings (timeout, a model per agent) are kept in `%USERPROFILE%\.kraken-agent-bridge\listener.json`. Nothing runs while nobody asks. See [USAGE.md](USAGE.md#the-ai-chat-assistant) for how answers, scope and approvals work.
 
 ## 8. Upgrading from Claude Bridge
 
