@@ -23,7 +23,7 @@ FGU can't accept incoming connections, so the extension asks a local daemon for 
 
 - **The extension** runs inside FGU. It keeps one request open to the daemon, runs each command it gets, and sends back the result as JSON.
 - **The daemon** listens on `127.0.0.1` only, so other computers can't reach it.
-- **The MCP server** gives agents 20 tools named `fgu_*`. It starts the daemon itself.
+- **The MCP server** gives agents 34 tools named `fgu_*`. It starts the daemon itself.
 
 The extension also ships its own documentation: an **agent guide**, also packaged as a skill, that teaches an agent how FGU works and how to do real jobs in it.
 
@@ -53,6 +53,18 @@ The extension also ships its own documentation: an **agent guide**, also package
 - after you edit ruleset or extension files, `/reload` and read the new console errors;
 - test player-side behaviour through a player copy of FGU on the same PC (the `client` role);
 - reach several GM copies at once (`host2` to `host4`).
+
+**Answer questions at the table (new in 1.1)**
+- anyone types `@ai what does prone do?` in FGU's chat, or `/ai ...` privately; the answer is whispered to the asker and the GM, or held for the GM when it could spoil the adventure;
+- a small listener answers each question with the agent **you** already use: Claude Code, Codex, Gemini, Grok, or any command line. Nothing runs, and nothing is spent, while nobody asks;
+- a player's question can read only what that player could see in their own copy of FGU. The bridge enforces it, and each run is locked to its asker: no shell, no other tools, no way around the scope;
+- changes (fix a value, add an effect action, add an item) wait for a Yes: one plan, every step listed, approved by the player for their own character or by the GM for anything else. Always / Never are remembered.
+
+**Script FGU from outside (new in 1.1)**
+- `fgu_batch`: up to 100 commands in one round trip, with later steps using earlier results as live Lua values;
+- handles: keep tables and records inside FGU between calls;
+- events: watch database paths and chat as they change;
+- search and read the ruleset's own Lua and XML, inside its `.pak` files.
 
 **Work with any agent**
 - a standard stdio MCP server for Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, VS Code and other MCP clients;
@@ -153,3 +165,7 @@ The instructions stay with the installed extension. Later, any agent can be poin
 The Kraken ([krakenunbound](https://github.com/krakenunbound)). Other Fantasy Grounds extensions:
 - [Kraken AD&D 2E Character Wizard](https://github.com/krakenunbound/kraken-adnd-2e-charwizard)
 - [Kraken GM Icon](https://github.com/krakenunbound/kraken-gm-icon)
+
+## Licence
+
+Free, under the [GNU GPL v3](LICENSE). Use it, share it, change it. If you distribute a changed version, you must publish its source under the same licence.

@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.1.0 (2026-10-30)
+
+**The @ai chat assistant, batches, handles, events and source search.** Still free, now under the GPL-3.0 licence.
+
+- **Ask the AI from FGU's chat.** `@ai <question>` (shown in chat) or `/ai <question>` (private), from the GM or any player.
+  - The answer is whispered to the asker and the GM; `public` shows everyone when asked for; `gm_only` holds spoilers for the GM, who can pass them on with `/ai send n` or show everyone with `/ai public n`. `/ai list` shows the questions.
+  - **The listener** (`server/fgu_listener.py`) waits for questions without running any AI, then starts one run per question with the agent you choose: **Claude Code, Codex, Gemini or Grok** presets, or any command line. No default; nothing tied to one vendor.
+  - **Scope enforced by the bridge, not just the prompt.** A player's question reads only what that player could see in their own copy of FGU (their characters, what is public or shared, the books open to players; hidden tracker entries and foes' hit points left out). GM-only records are refused.
+  - **Locked down.** Each run is registered with the daemon and gets a token tied to its scope; while it runs, commands without the token are refused, so no shell or HTTP detour reaches the campaign unscoped. Each preset also runs its agent with only the bridge's tools: no shell, files, web or the user's other MCP servers.
+  - **Changes need a Yes.** All changes for a question go in one plan (up to 50 steps), shown in full in a Yes / No / Always / Never window. A player's plan may touch only their own characters and goes to that player's screen; everything else to the GM. Ownership is checked again before running. Always / Never are remembered per user and kind of change; `/agentbridge permissions reset` forgets them.
+  - If a run fails or ends without replying, the GM gets a note instead of silence.
+- **`fgu_batch`:** up to 100 commands in one round trip; later steps use earlier results with `{"$ref": "1.result.1"}` (real tables and nodes, not JSON copies); stops at the first failure. A command that reports an error now counts as failed.
+- **Handles:** `keep: true` on `fgu_call` / `fgu_window_call` keeps returned tables and nodes inside FGU; pass `{"$handle": "h1"}`; `fgu_handles` lists and releases them.
+- **Events:** `fgu_subscribe` watches database paths (FGU wildcards), `fgu_chat_events` streams chat, `fgu_events` reads them (long-poll). Rate-limited so a busy path can't swamp FGU.
+- **Ruleset source tools:** `fgu_source_search` searches the loaded ruleset and every ruleset under it (and extensions) inside the `.pak` files; `fgu_source_read` reads lines or lists files.
+- **In-game commands:** `/agentbridge status`, `stop`, `permissions reset`, `help`.
+- **HTTP API:** `GET /events`, `POST /run`, and an optional `scope` on `/cmd`.
+- **Licence:** GPL-3.0 (`LICENSE`). Anyone may use, share and change it; anyone who distributes a changed version must publish its source under the same licence.
+
 ## v1.0.3 (2026-10-17)
 
 - **Install with an agent from the download.** Tell your agent: *Unpack `KrakenAgentBridge-v1.0.3.zip`, read AGENT_INSTALL.md, then install it and get set up.*

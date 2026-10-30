@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!-- Kraken Agent Bridge: the Yes/No window for a plan of changes the AI wants to make. -->
+<root>
+	<windowclass name="kab_approval">
+		<frame>utilitybox</frame>
+		<placement>
+			<size width="800" height="600" />
+		</placement>
+		<sizelimits>
+			<minimum width="500" height="350" />
+			<dynamic />
+		</sizelimits>
+		<script>
+			function onClose()
+				AgentAssistant.onApprovalClosed();
+			end
+		</script>
+		<sheetdata>
+			<windowtitlebar_utilitybox name="title" />
+			<anchor_content_utilitybox_top />
+			<anchor_content_utilitybox_bottom />
+
+			<stringcontrol name="plan">
+				<anchored to="contentanchor">
+					<top anchor="bottom" offset="5" />
+					<left />
+					<right offset="-15" />
+					<bottom parent="bottomanchor" anchor="top" offset="-10" />
+				</anchored>
+				<font>sheettext</font>
+				<multilinespacing>20</multilinespacing>
+				<readonly />
+			</stringcontrol>
+			<scrollbar>
+				<anchored to="plan" />
+				<target>plan</target>
+			</scrollbar>
+
+			<button_text name="button_yes">
+				<anchored to="bottomanchor" width="80">
+					<top />
+					<left />
+				</anchored>
+				<text>Yes</text>
+				<tooltip><text>Run every step in order</text></tooltip>
+				<script>function onButtonPress() AgentAssistant.answerShown("yes"); end</script>
+			</button_text>
+			<button_text name="button_no">
+				<anchored to="button_yes" width="80">
+					<top />
+					<left anchor="right" offset="15" />
+				</anchored>
+				<text>No</text>
+				<tooltip><text>Change nothing</text></tooltip>
+				<script>function onButtonPress() AgentAssistant.answerShown("no"); end</script>
+			</button_text>
+			<button_text name="button_always">
+				<anchored to="bottomanchor" width="80">
+					<top />
+					<right offset="-95" />
+				</anchored>
+				<text>Always</text>
+				<tooltip><text>Yes, and from now on allow these kinds of change for this user without asking</text></tooltip>
+				<script>function onButtonPress() AgentAssistant.answerShown("always"); end</script>
+			</button_text>
+			<button_text name="button_never">
+				<anchored to="bottomanchor" width="80">
+					<top />
+					<right />
+				</anchored>
+				<text>Never</text>
+				<tooltip><text>No, and from now on refuse these kinds of change for this user without asking</text></tooltip>
+				<script>function onButtonPress() AgentAssistant.answerShown("never"); end</script>
+			</button_text>
+
+			<resize_utilitybox />
+		</sheetdata>
+	</windowclass>
+</root>

@@ -112,6 +112,14 @@ The FGU extension connects only while the local daemon runs. The MCP server star
 
 This adds a "Kraken Agent Bridge daemon" shortcut to the user's Startup folder and starts the daemon. `--status` checks it and `--remove` undoes it. Only one daemon ever runs.
 
+## 4b. The @ai chat assistant (optional, ask first)
+
+FGU 1.1 lets anyone at the table ask the AI from chat (`@ai <question>`, or `/ai` privately). A small listener answers each question with one agent run, limited to what the asker may see; any change waits for a Yes in FGU. Ask the user whether they want it. If so:
+1. Call `fgu_listener {"action": "status"}` (or run `"<python>" "<bridge>\server\fgu_listener.py" --agent X` later). `agents_found` lists the agent CLIs on this PC: claude, codex, gemini, grok.
+2. **Ask the user which agent should answer.** There is no default; use the one they choose, which must be logged in. For Grok, the `fgu` server must be in Grok's own config (step 2).
+3. Start it: `fgu_listener {"action": "start", "agent": "<choice>"}`. The choice is saved in `%USERPROFILE%\.kraken-agent-bridge\listener.json`, where a model can be set per agent (`"extra_args": {"codex": ["-m", "<model>"]}`).
+4. Tell the user: type `@ai what does prone do?` in FGU's chat to try it, `/agentbridge help` for the commands. The listener must be running for questions to be answered; it costs nothing while idle.
+
 ## 5. Reload your tools
 
 Most clients load MCP servers at startup, so you may need a restart or a new session before the `fgu_*` tools appear. Tell the user if so. Until then you can use `tools\fgu.py` from step 2.

@@ -12,7 +12,7 @@
 -- "call" reaches functions only in the packages listed in tPackages (or
 -- added with AgentBridge.registerPackage; the old name ClaudeBridge still works).
 
-local VERSION = "1.0.3";
+local VERSION = "1.1.0";
 local BASE = "http://127.0.0.1:47111";
 local CHUNK = 12000;
 
@@ -25,6 +25,14 @@ local _bRunning = false;
 local _nLastReply = 0;
 local STALE = 40;
 local tPackages = {};
+-- Values an agent keeps inside FGU between commands (id -> value), and
+-- database subscriptions (id -> { path, events, handlers }).
+local _tHandles = {};
+local _nHandle = 0;
+local _tSubs = {};
+local _nSub = 0;
+-- The results of the batch being run, for {"$ref": "2.result.1"} arguments.
+local _tBatch = nil;
 
 --
 -- Setup
@@ -58,7 +66,7 @@ function onInit()
 	Comm.registerSlashHandler("claudebridge", onSlash, "Reconnect the Kraken Agent Bridge (old name)");
 	registerDefaultPackages();
 	if ChatManager and ChatManager.registerReceiveMessageCallback then
-		ChatManager.registerReceiveMessageCallback(nudge);
+		ChatManager.registerReceiveMessageCallback(function(msg) nudge(); onChatReceived(msg); end);
 	end
 	-- A window opening also restarts a dead loop. Subscribe through FGU's event
 	-- list: replacing Interface.onWindowOpened and calling the old handler ran
@@ -144,16 +152,39 @@ function registerDefaultPackages()
 		KrakenAutoload = KrakenAutoload,
 		SpellManager = SpellManager, KrakenFeatures = KrakenFeatures, KrakenDecal = KrakenDecal, KrakenWeaponFeats = KrakenWeaponFeats, KrakenMonk = KrakenMonk, KrakenSpells = KrakenSpells, KrakenSaves = KrakenSaves, KrakenClassActions = KrakenClassActions, KrakenXP = KrakenXP, CampaignDataManager = CampaignDataManager, CombatManager2 = CombatManager2, ActionSave = ActionSave, ActionHeal = ActionHeal, ActionSpell = ActionSpell, ActionCast = ActionCast, ActionSkill = ActionSkill, ActionAbility = ActionAbility, ActionEffect = ActionEffect, ActionSpellSave = ActionSpellSave, ActionHealD20 = ActionHealD20,
 		ChatIdentityManager = ChatIdentityManager, KrakenGMIcon = KrakenGMIcon,
-		AgentBridge = AgentBridge, ClaudeBridge = ClaudeBridge,
+		AgentBridge = AgentBridge, ClaudeBridge = ClaudeBridge, AgentAssistant = AgentAssistant,
 	};
 	for k, v in pairs(t) do
 		registerPackage(k, v);
 	end
 end
 
-function onSlash()
-	start();
-	ChatManager.SystemMessage("Agent bridge: reconnecting to local server.");
+-- /agentbridge [start|stop|status|permissions reset|help]; no word reconnects.
+function onSlash(_, sParams)
+	local sWord = StringManager.trim(sParams or ""):lower();
+	if sWord == "stop" then
+		stop();
+	elseif sWord == "status" then
+		local nAge = os.time() - _nLastReply;
+		local nSubs, nHandles = 0, 0;
+		for _ in pairs(_tSubs) do nSubs = nSubs + 1; end
+		for _ in pairs(_tHandles) do nHandles = nHandles + 1; end
+		ChatManager.SystemMessage(string.format("Agent bridge %s: %s, channel %s, last reply from the server %ds ago, %d subscriptions, %d handles.",
+			VERSION, _bRunning and "running" or "paused", getChannel(), nAge, nSubs, nHandles));
+		if AgentAssistant and AgentAssistant.statusText then
+			ChatManager.SystemMessage(AgentAssistant.statusText());
+		end
+	elseif sWord == "permissions reset" then
+		if AgentAssistant and AgentAssistant.resetDecisions then
+			AgentAssistant.resetDecisions();
+		end
+	elseif sWord == "help" then
+		ChatManager.SystemMessage("/agentbridge - reconnect | /agentbridge stop | /agentbridge status | /agentbridge permissions reset\r"
+			.. "@ai <question> - ask the AI in chat (answer goes to you and the GM) | /ai <question> - private question (the GM only)");
+	else
+		start();
+		ChatManager.SystemMessage("Agent bridge: reconnecting to local server.");
+	end
 end
 
 -- The first request of a session is what Fantasy Grounds shows in its
@@ -362,13 +393,44 @@ end
 -- Argument decoding. JSON objects with one of these keys become FG values:
 --   {"$node": "path"}  -> databasenode       {"$actor": "path"} -> rActor
 --   {"$nil": true}     -> nil
+--   {"$handle": "h3"}  -> a value kept with keep=true (any Lua value: table, node, actor)
+--   {"$ref": "2.result.1"} -> inside a batch: a value from step 2's result (raw Lua, not JSON)
 --
+
+-- "2.result.1" -> step 2's result, then its field "result", then index 1.
+local function resolveRef(sRef)
+	if not _tBatch then
+		error("$ref is only valid inside fgu_batch");
+	end
+	local v = nil;
+	local bFirst = true;
+	for sPart in tostring(sRef):gmatch("[^%.]+") do
+		local k = tonumber(sPart) or sPart;
+		if bFirst then
+			v = _tBatch[k];
+			bFirst = false;
+		elseif type(v) == "table" then
+			v = v[k];
+		else
+			error("$ref " .. tostring(sRef) .. ": nothing at " .. sPart);
+		end
+	end
+	return v;
+end
 
 local function decodeArg(v)
 	if type(v) ~= "table" then
 		return v;
 	end
-	if v["$node"] then
+	if v["$handle"] then
+		local h = _tHandles[v["$handle"]];
+		if not h then
+			error("no handle " .. tostring(v["$handle"]) .. " (released, or FGU reloaded)");
+		end
+		return h.value;
+	elseif v["$ref"] then
+		return resolveRef(v["$ref"]);
+	elseif v["$node"] then
 		return DB.findNode(v["$node"]);
 	elseif v["$shortcut"] then
 		local link = v["$shortcut"];
@@ -415,6 +477,38 @@ end
 -- Database
 --
 
+-- The combat tracker is public in FGU, but a player's table only shows the
+-- entries that are visible to them and no numbers for foes. For a player's
+-- @ai question: hidden entries are left out, and so are the hit point and
+-- defence fields of entries that are not friends of the party.
+local tFoeFields = { "^hp", "hp$", "^wound", "wounds$", "^ac$", "^ac[_%.]", "^defen", "^hd$", "^hitdice", "^nonlethal",
+	"^temphp", "^deathsave", "^injur", "^damage", "^fatigue", "^stress" };
+function hiddenFromPlayer(node, sUser)
+	local sPath = DB.getPath(node) or "";
+	local sEntry = sPath:match("^(combattracker%.list%.[^%.]+)");
+	if not sEntry then
+		return false;
+	end
+	local nodeEntry = DB.findNode(sEntry);
+	if not nodeEntry or isOwnedBy(sEntry, sUser) then
+		return false;
+	end
+	if DB.getValue(nodeEntry, "tokenvis", 1) == 0 then
+		return true;
+	end
+	if DB.getValue(nodeEntry, "friendfoe", "") == "friend" or sPath == sEntry then
+		return false;
+	end
+	local sField = sPath:sub(#sEntry + 2):match("^([^%.]+)") or "";
+	sField = sField:lower();
+	for _, sPat in ipairs(tFoeFields) do
+		if sField:match(sPat) then
+			return true;
+		end
+	end
+	return false;
+end
+
 local function nodeToTable(node, nDepth, tBudget)
 	local tOut = {};
 	for sName, nodeChild in pairs(DB.getChildren(node)) do
@@ -422,29 +516,70 @@ local function nodeToTable(node, nDepth, tBudget)
 			tOut["..."] = "truncated";
 			break;
 		end
-		tBudget.n = tBudget.n - 1;
-		local sType = DB.getType(nodeChild);
-		if sType == "node" then
-			if nDepth > 1 then
-				tOut[sName] = nodeToTable(nodeChild, nDepth - 1, tBudget);
+		-- tBudget.user: a player's question; leave out what their table hides.
+		if not (tBudget.user and hiddenFromPlayer(nodeChild, tBudget.user)) then
+			tBudget.n = tBudget.n - 1;
+			local sType = DB.getType(nodeChild);
+			if sType == "node" then
+				if nDepth > 1 then
+					tOut[sName] = nodeToTable(nodeChild, nDepth - 1, tBudget);
+				else
+					tOut[sName] = { ["$children"] = DB.getChildCount(nodeChild) };
+				end
+			elseif sType == "number" or sType == "string" or sType == "formattedtext" then
+				tOut[sName] = DB.getValue(nodeChild);
+			elseif sType == "dice" then
+				tOut[sName] = { ["$dice"] = DiceManager.convertDiceToString(DB.getValue(nodeChild) or {}) };
+			elseif sType == "windowreference" then
+				local sClass, sRecord = DB.getValue(nodeChild);
+				tOut[sName] = { ["$link"] = { class = sClass or "", record = sRecord or "" } };
 			else
-				tOut[sName] = { ["$children"] = DB.getChildCount(nodeChild) };
+				tOut[sName] = { ["$type"] = tostring(sType) };
 			end
-		elseif sType == "number" or sType == "string" or sType == "formattedtext" then
-			tOut[sName] = DB.getValue(nodeChild);
-		elseif sType == "dice" then
-			tOut[sName] = { ["$dice"] = DiceManager.convertDiceToString(DB.getValue(nodeChild) or {}) };
-		elseif sType == "windowreference" then
-			local sClass, sRecord = DB.getValue(nodeChild);
-			tOut[sName] = { ["$link"] = { class = sClass or "", record = sRecord or "" } };
-		else
-			tOut[sName] = { ["$type"] = tostring(sType) };
 		end
 	end
 	return tOut;
 end
 
 local tCommands = {};
+
+-- Handles: with keep=true a call's tables, nodes and other non-JSON values
+-- stay inside FGU; the reply lists their ids for {"$handle": id} arguments.
+local function describeValue(v)
+	local sType = type(v);
+	if sType == "databasenode" or sType == "userdata" then
+		local bOK, sPath = pcall(DB.getPath, v);
+		if bOK and sPath then
+			return "node " .. sPath;
+		end
+	elseif sType == "table" then
+		local n = 0;
+		for _ in pairs(v) do n = n + 1; end
+		return "table (" .. n .. " fields)";
+	end
+	return sType;
+end
+
+function keepValue(v)
+	_nHandle = _nHandle + 1;
+	local sID = "h" .. _nHandle;
+	_tHandles[sID] = { value = v, kind = describeValue(v), time = os.time() };
+	return sID;
+end
+
+function keepResult(tResult, a)
+	local tOut = { result = tResult };
+	if a.keep then
+		tOut.handles = {};
+		for i = 1, #tResult + 1 do
+			local v = tResult[i];
+			if v ~= nil and type(v) ~= "string" and type(v) ~= "number" and type(v) ~= "boolean" then
+				tOut.handles[tostring(i)] = keepValue(v);
+			end
+		end
+	end
+	return tOut;
+end
 
 function tCommands.ping()
 	return {
@@ -465,7 +600,7 @@ function tCommands.ping()
 	};
 end
 
-function tCommands.db_get(a)
+function tCommands.db_get(a, tScope)
 	local node = DB.findNode(a.path or "");
 	if not node then
 		return { exists = false };
@@ -474,18 +609,21 @@ function tCommands.db_get(a)
 	if sType ~= "node" then
 		return { exists = true, type = sType, value = DB.getValue(node) };
 	end
-	local tBudget = { n = tonumber(a.max) or 500 };
+	local tBudget = { n = tonumber(a.max) or 500, user = (tScope and tScope.kind == "player") and tScope.user or nil };
 	return { exists = true, type = "node", value = nodeToTable(node, tonumber(a.depth) or 2, tBudget) };
 end
 
-function tCommands.db_list(a)
+function tCommands.db_list(a, tScope)
 	local node = DB.findNode(a.path or "");
 	if not node then
 		return { exists = false };
 	end
+	local sUser = (tScope and tScope.kind == "player") and tScope.user or nil;
 	local t = {};
 	for sName, nodeChild in pairs(DB.getChildren(node)) do
-		table.insert(t, { name = sName, type = DB.getType(nodeChild), label = DB.getValue(nodeChild, "name", "") });
+		if not (sUser and hiddenFromPlayer(nodeChild, sUser)) then
+			table.insert(t, { name = sName, type = DB.getType(nodeChild), label = DB.getValue(nodeChild, "name", "") });
+		end
 	end
 	return { exists = true, children = t };
 end
@@ -724,7 +862,7 @@ function tCommands.window_call(a)
 		return { error = "no function: " .. tostring(a.fn) };
 	end
 	local tArgs, n = decodeArgs(a.args);
-	return { result = { fn(fUnpack(tArgs, 1, n)) } };
+	return keepResult({ fn(fUnpack(tArgs, 1, n)) }, a);
 end
 
 --
@@ -741,7 +879,7 @@ function tCommands.call(a)
 		return { error = "no function " .. tostring(a.package) .. "." .. tostring(a.fn) };
 	end
 	local tArgs, n = decodeArgs(a.args);
-	return { result = { fn(fUnpack(tArgs, 1, n)) } };
+	return keepResult({ fn(fUnpack(tArgs, 1, n)) }, a);
 end
 
 function tCommands.get(a)
@@ -770,14 +908,356 @@ function tCommands.chat(a)
 	return { sent = true };
 end
 
-function runCommand(tCommand)
-	local fn = tCommands[tCommand.cmd or ""];
-	if not fn then
-		return { ok = false, error = "unknown command: " .. tostring(tCommand.cmd) };
+--
+-- Handles
+--
+
+function tCommands.handles()
+	local t = {};
+	for sID, h in pairs(_tHandles) do
+		table.insert(t, { id = sID, kind = h.kind, age = os.time() - h.time });
 	end
-	local bOK, vResult = pcall(fn, tCommand.args or {});
+	table.sort(t, function(x, y) return (tonumber(x.id:sub(2)) or 0) < (tonumber(y.id:sub(2)) or 0); end);
+	return { handles = t };
+end
+
+-- a.ids: ids to release; none (or a.all) releases every handle.
+function tCommands.release(a)
+	local n = 0;
+	if type(a.ids) == "table" and #a.ids > 0 and not a.all then
+		for _, sID in ipairs(a.ids) do
+			if _tHandles[sID] then
+				_tHandles[sID] = nil;
+				n = n + 1;
+			end
+		end
+	else
+		for sID in pairs(_tHandles) do
+			_tHandles[sID] = nil;
+			n = n + 1;
+		end
+	end
+	return { released = n };
+end
+
+-- a.value: kept as a handle (decoded first, so {"$node": path} keeps the node).
+function tCommands.keep(a)
+	return { handle = keepValue(decodeArg(a.value)) };
+end
+
+--
+-- Batches: steps run in order in one round trip; a step's arguments can use
+-- earlier results with {"$ref": "<step>.<field>..."}. Stops at the first
+-- failed step unless continue_on_error. keep=true on a step keeps its values.
+--
+
+local MAX_BATCH = 100;
+
+function tCommands.batch(a, tScope)
+	local tSteps = a.steps or {};
+	if #tSteps > MAX_BATCH then
+		return { error = "a batch takes at most " .. MAX_BATCH .. " steps (got " .. #tSteps .. ")" };
+	end
+	local tOuter = _tBatch;
+	local tRaw = {};
+	local tOut = {};
+	_tBatch = tRaw;
+	local nFailed = nil;
+	for i, tStep in ipairs(tSteps) do
+		local tResult = runOne(tStep.cmd, tStep.args or {}, tScope);
+		tRaw[i] = tResult.data;
+		table.insert(tOut, tResult);
+		if not tResult.ok then
+			nFailed = nFailed or i;
+			if not a.continue_on_error then
+				break;
+			end
+		end
+	end
+	_tBatch = tOuter;
+	return { steps = tOut, ran = #tOut, of = #tSteps, failed_step = nFailed };
+end
+
+--
+-- Events. FGU pushes them to the daemon (GET /event); agents read them with
+-- fgu_events. Database subscriptions use DB.addHandler, so paths may use FGU's
+-- wildcards ("charsheet.*.hp.wounds", "combattracker.list.*").
+--
+
+local tEventNames = { update = "onUpdate", childadded = "onChildAdded", childdeleted = "onChildDeleted",
+	delete = "onDelete", add = "onAdd", childupdate = "onChildUpdate", integritychange = "onIntegrityChange" };
+local _nEventsSent = 0;
+local _nEventWindow = 0;
+local _nDropped = 0;
+-- More than this many events in one second are counted, not sent, so a
+-- subscription to something busy cannot swamp FGU with requests.
+local MAX_EVENTS_PER_SECOND = 40;
+
+function pushEvent(tEvent)
+	if not _bRunning then return; end
+	local nNow = os.time();
+	if nNow ~= _nEventWindow then
+		_nEventWindow = nNow;
+		_nEventsSent = 0;
+		if _nDropped > 0 then
+			post("/event", { channel = getChannel(), instance = _sInstance, type = "dropped", count = _nDropped, time = nNow });
+			_nDropped = 0;
+			_nEventsSent = 1;
+		end
+	end
+	if _nEventsSent >= MAX_EVENTS_PER_SECOND then
+		_nDropped = _nDropped + 1;
+		return;
+	end
+	_nEventsSent = _nEventsSent + 1;
+	tEvent.channel = getChannel();
+	tEvent.instance = _sInstance;
+	tEvent.time = nNow;
+	post("/event", tEvent);
+end
+
+local function nodePath(v)
+	local bOK, sPath = pcall(DB.getPath, v);
+	return bOK and sPath or nil;
+end
+
+local function valueOf(node)
+	local bOK, sType = pcall(DB.getType, node);
+	if bOK and (sType == "number" or sType == "string") then
+		return DB.getValue(node);
+	end
+	return nil;
+end
+
+-- a.path, a.events (default {"update"}); a.values=true adds the new value of
+-- number and string fields to update events.
+function tCommands.subscribe(a)
+	local sPath = a.path or "";
+	if sPath == "" then
+		return { error = "path is required" };
+	end
+	local tSub = { path = sPath, events = {}, handlers = {} };
+	local tWanted = {};
+	for _, sEvent in ipairs(a.events or { "update" }) do
+		local sName = tostring(sEvent or ""):lower();
+		if not tEventNames[sName] then
+			return { error = "unknown event " .. tostring(sEvent) .. " (update, childadded, childdeleted, childupdate, delete, add, integritychange)" };
+		end
+		table.insert(tWanted, sName);
+	end
+	_nSub = _nSub + 1;
+	local sID = "s" .. _nSub;
+	for _, sName in ipairs(tWanted) do
+		local sHandler = tEventNames[sName];
+		local fn = function(node, nodeChild)
+			local t = { type = "db", sub = sID, event = sName, path = nodePath(node) or sPath };
+			if nodeChild and type(nodeChild) ~= "boolean" then
+				t.child = nodePath(nodeChild);
+			end
+			if a.values and sName == "update" then
+				t.value = valueOf(node);
+			end
+			pushEvent(t);
+		end;
+		DB.addHandler(sPath, sHandler, fn);
+		table.insert(tSub.events, sName);
+		tSub.handlers[sHandler] = fn;
+	end
+	_tSubs[sID] = tSub;
+	return { id = sID, path = sPath, events = tSub.events };
+end
+
+function tCommands.unsubscribe(a)
+	local n = 0;
+	for sID, tSub in pairs(_tSubs) do
+		if a.all or sID == a.id then
+			for sHandler, fn in pairs(tSub.handlers) do
+				pcall(DB.removeHandler, tSub.path, sHandler, fn);
+			end
+			_tSubs[sID] = nil;
+			n = n + 1;
+		end
+	end
+	return { removed = n };
+end
+
+-- Chat messages as events (a.on=false stops). Secret messages (whispers and
+-- the GM's private rolls) are left out unless a.private=true.
+local _bChatEvents = false;
+local _bChatPrivate = false;
+function tCommands.chat_events(a)
+	_bChatEvents = (a.on ~= false);
+	_bChatPrivate = (a.private == true);
+	return { chat = _bChatEvents, private = _bChatPrivate };
+end
+
+function tCommands.subscriptions()
+	local t = {};
+	for sID, tSub in pairs(_tSubs) do
+		table.insert(t, { id = sID, path = tSub.path, events = tSub.events });
+	end
+	return { subscriptions = t, chat = _bChatEvents };
+end
+
+function onChatReceived(msg)
+	if not _bChatEvents or type(msg) ~= "table" then
+		return;
+	end
+	if msg.secret and not _bChatPrivate then
+		return;
+	end
+	local t = { type = "chat", sender = msg.sender or "", text = msg.text or "", mode = msg.mode or "",
+		secret = msg.secret and true or false };
+	if type(msg.dice) == "table" and #msg.dice > 0 then
+		local nTotal = msg.diemodifier or 0;
+		for _, d in ipairs(msg.dice) do
+			nTotal = nTotal + (tonumber(d.result) or 0);
+		end
+		t.total = nTotal;
+	end
+	pushEvent(t);
+end
+
+-- Other scripts (the chat assistant) add their own commands here.
+function addCommand(sName, fn)
+	tCommands[sName] = fn;
+end
+
+--
+-- Scope. Commands sent for an @ai question carry the asker's scope
+-- ({kind = "player"|"gm", user = ...}). Without a scope a command has full
+-- access (an agent the GM runs). A player scope reads only what that player
+-- could see in their own copy of FGU and changes nothing directly; a GM scope
+-- reads anything. Changes in either go through an approved plan (propose).
+--
+
+local tReadOnly = { ping = true, db_get = true, db_list = true, handles = true, release = true, keep = true,
+	subscriptions = true, window_list = true, window_read = true, window_has = true, get = true };
+local tAssistant = { reply = true, propose = true, plan_status = true, queries = true, query_context = true };
+local tGMReadFns = { "^get", "^is", "^has", "^find", "^resolve", "^lookup", "^list", "^count", "^convert",
+	"^encode", "^decode", "^parse", "^check", "^can", "^describe", "^inspect" };
+
+local function moduleOf(sPath)
+	return (sPath or ""):match("@(.+)$");
+end
+
+-- What a player sees in their own copy of FGU: what they own, what is public
+-- or shared with them, and books the GM lets players open.
+function isVisibleTo(sPath, sUser)
+	local sModule = moduleOf(sPath);
+	if sModule then
+		local bOK, tInfo = pcall(Module.getModuleInfo, sModule);
+		if not bOK or type(tInfo) ~= "table" then
+			return false;
+		end
+		local sPerm = tostring(tInfo.permission or "");
+		return sPerm == "allow" or sPerm == "autoload";
+	end
+	local node = DB.findNode(sPath or "");
+	while node do
+		if DB.getOwner(node) == sUser then
+			return true;
+		end
+		local bPub, vPub = pcall(DB.isPublic, node);
+		if bPub and vPub then
+			return true;
+		end
+		local bHold, tHolders = pcall(DB.getHolders, node);
+		if bHold and type(tHolders) == "table" then
+			for _, sHolder in ipairs(tHolders) do
+				if sHolder == sUser then
+					return true;
+				end
+			end
+		end
+		node = DB.getParent(node);
+	end
+	return false;
+end
+
+-- A path the user owns: the node or one above it is owned by them.
+function isOwnedBy(sPath, sUser)
+	if (sUser or "") == "" or moduleOf(sPath) then
+		return false;
+	end
+	local node = DB.findNode(sPath or "");
+	if not node then
+		-- Not created yet: check the nearest existing parent.
+		local sParent = (sPath or ""):match("^(.+)%.[^%.]+$");
+		return sParent and isOwnedBy(sParent, sUser) or false;
+	end
+	while node do
+		if DB.getOwner(node) == sUser then
+			return true;
+		end
+		node = DB.getParent(node);
+	end
+	return false;
+end
+
+local function checkScope(sCmd, a, tScope)
+	if not tScope or tAssistant[sCmd] or sCmd == "batch" then
+		return nil;
+	end
+	if tScope.kind == "gm" then
+		if tReadOnly[sCmd] or sCmd == "chat_events" or sCmd == "subscribe" or sCmd == "unsubscribe" then
+			return nil;
+		end
+		if sCmd == "call" then
+			for _, sPat in ipairs(tGMReadFns) do
+				if (a.fn or ""):match(sPat) then
+					return nil;
+				end
+			end
+		end
+		return "an @ai question cannot change the campaign directly; send the changes with fgu_propose so the GM can approve them";
+	end
+	-- player
+	if sCmd == "db_get" or sCmd == "db_list" then
+		local node = DB.findNode(a.path or "");
+		if node and hiddenFromPlayer(node, tScope.user) then
+			return "hidden from " .. tostring(tScope.user) .. ": " .. tostring(a.path);
+		end
+		if isVisibleTo(a.path, tScope.user) then
+			return nil;
+		end
+		return "not visible to " .. tostring(tScope.user) .. ": " .. tostring(a.path);
+	end
+	if sCmd == "ping" or sCmd == "handles" or sCmd == "release" then
+		return nil;
+	end
+	return "a player's @ai question can only read what that player can see; changes to their own character go through fgu_propose";
+end
+
+-- Runs one command (a polled command, a batch step or a plan step).
+function runOne(sCmd, tArgs, tScope)
+	local fn = tCommands[sCmd or ""];
+	if not fn then
+		return { ok = false, error = "unknown command: " .. tostring(sCmd) };
+	end
+	local sDenied = checkScope(sCmd, tArgs or {}, tScope);
+	if sDenied then
+		return { ok = false, error = sDenied, denied = true };
+	end
+	local bOK, vResult = pcall(fn, tArgs or {}, tScope);
 	if not bOK then
 		return { ok = false, error = tostring(vResult) };
 	end
+	if sCmd == "batch" and type(vResult) == "table" and vResult.failed_step then
+		return { ok = false, error = "step " .. vResult.failed_step .. " failed", data = vResult };
+	end
+	-- Commands report problems as { error = ... } (window not open, no such
+	-- function...): that is a failure, so a batch or plan stops there.
+	if type(vResult) == "table" and type(vResult.error) == "string" then
+		return { ok = false, error = vResult.error, data = vResult };
+	end
 	return { ok = true, data = vResult };
+end
+
+function runCommand(tCommand)
+	local tScope = tCommand.scope;
+	if type(tScope) ~= "table" or (tScope.kind ~= "player" and tScope.kind ~= "gm") then
+		tScope = nil;
+	end
+	return runOne(tCommand.cmd, tCommand.args or {}, tScope);
 end

@@ -13,10 +13,25 @@ Fantasy Grounds side (the extension, GET only):
                                        held up to POLL_HOLD seconds; returns one
                                        command as JSON, or an empty body
   /result?id=&part=&of=&d=<chunk>      result JSON, possibly in several parts
+  /event?d=<json>                      an event: a database change the agent
+                                       subscribed to, a chat message, an @ai
+                                       question, a plan approved or denied
 
 Client side (the MCP server, or any program: curl, a script, an agent's HTTP tool):
   POST /cmd   {"cmd": "...", "args": {...}, "timeout": 30, "role": "host"}
   GET  /status                                              -> connection state
+  GET  /events?r=<role>&since=<seq>&wait=<s>&types=query,chat
+                                       events after seq (held up to wait seconds
+                                       until one arrives); -> {"events": [...], "last": seq}
+  POST /cmd may carry "scope": {"kind": "player"|"gm", "user": ..., "query": ...};
+       the extension then limits the command to what that asker may do.
+  POST /run  {"action": "start", "scope": {...}, "ttl": 360} -> {"token": ...}
+             {"action": "end", "token": ...}
+       The @ai listener registers each agent run. A command carrying the run's
+       "token" gets the registered scope, whatever scope it names. While any run
+       is active, commands (and /events reads) without a token are refused, so
+       an agent answering a player cannot reach the campaign unscoped by some
+       other route (a shell, curl). Runs expire after ttl seconds.
 
 Old extension builds poll without r=; they count as "host".
 
@@ -53,6 +68,23 @@ results = {}          # id -> result dict
 waiters = {}          # id -> threading.Event
 parts = {}            # id -> {index: chunk}
 cancelled = set()     # ids of commands whose caller gave up (timed out): never delivered later
+EVENT_KEEP = 2000     # events kept per channel
+events = {r: [] for r in ROLES}   # channel -> [event dicts with "seq"]
+event_seq = [0]
+event_cond = threading.Condition(lock)
+runs = {}             # token -> {"scope": {...}, "expires": time}
+
+
+def active_runs():
+    """Live @ai runs (called with the lock held); expired ones are dropped."""
+    now = time.time()
+    for tok in [t for t, r in runs.items() if r["expires"] < now]:
+        del runs[tok]
+    return runs
+
+
+LOCKED = ("an @ai question is being answered right now; commands without that run's token are refused "
+          "until it finishes (at most a few minutes)")
 state = {r: {"last_poll": 0.0, "hello": None, "polls": 0, "port": None, "owner": None, "others": {}} for r in ROLES}
 OTHER_HOLD = 10.0     # how long a poll from a non-owning instance is held
 
@@ -108,13 +140,43 @@ def status():
     return dict(host, roles=tRoles)
 
 
-def run_command(cmd, args, timeout, role):
+def add_event(info):
+    """Stores an event from FGU (called with the lock held)."""
+    role = norm_role(info.get("channel"))
+    event_seq[0] += 1
+    info["seq"] = event_seq[0]
+    info.setdefault("time", time.time())
+    info["received"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    buf = events[role]
+    buf.append(info)
+    if len(buf) > EVENT_KEEP:
+        del buf[: len(buf) - EVENT_KEEP]
+    event_cond.notify_all()
+
+
+def get_events(role, since, wait, types):
+    role = norm_role(role)
+    deadline = time.time() + max(0.0, min(wait, 60.0))
+    with lock:
+        while True:
+            found = [e for e in events[role] if e["seq"] > since and (not types or e.get("type") in types)]
+            left = deadline - time.time()
+            if found or left <= 0:
+                found = found[:500]
+                return {"events": found, "last": found[-1]["seq"] if len(found) == 500 else event_seq[0]}
+            event_cond.wait(left)
+
+
+def run_command(cmd, args, timeout, role, scope=None):
     role = norm_role(role)
     cid = uuid.uuid4().hex[:12]
     ev = threading.Event()
     with lock:
         waiters[cid] = ev
-    queues[role].put({"id": cid, "cmd": cmd, "args": args or {}})
+    item = {"id": cid, "cmd": cmd, "args": args or {}}
+    if scope:
+        item["scope"] = scope
+    queues[role].put(item)
     if not ev.wait(timeout):
         with lock:
             waiters.pop(cid, None)
@@ -225,6 +287,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 state[role]["last_poll"] = time.time()
             self.reply("ok" if role in ("host", "client") else "ok " + role)
 
+        elif url.path == "/event":
+            try:
+                info = json.loads(q.get("d", "{}"))
+            except ValueError:
+                info = {"type": "bad", "raw": q.get("d", "")[:500]}
+            if not isinstance(info, dict):
+                info = {"type": "bad"}
+            with lock:
+                add_event(info)
+            self.reply("ok")
+
+        elif url.path == "/events":
+            with lock:
+                live = active_runs()
+                if live and q.get("t", "") not in live:
+                    self.reply(json.dumps({"events": [], "last": 0, "error": LOCKED}), ctype="application/json")
+                    return
+            types = {t for t in q.get("types", "").split(",") if t}
+            try:
+                since, wait = int(q.get("since", "0")), float(q.get("wait", "0"))
+            except ValueError:
+                since, wait = 0, 0.0
+            self.reply(json.dumps(get_events(q.get("r"), since, wait, types)), ctype="application/json")
+
         elif url.path == "/status":
             self.reply(json.dumps(status()), ctype="application/json")
 
@@ -233,7 +319,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urllib.parse.urlparse(self.path)
-        if url.path != "/cmd":
+        if url.path not in ("/cmd", "/run"):
             self.reply("not found", 404)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -242,7 +328,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             self.reply(json.dumps({"ok": False, "error": "request body is not JSON"}), 400, "application/json")
             return
-        result = run_command(body.get("cmd", ""), body.get("args"), float(body.get("timeout", 30)), body.get("role"))
+        if url.path == "/run":
+            with lock:
+                if body.get("action") == "start" and isinstance(body.get("scope"), dict):
+                    tok = uuid.uuid4().hex
+                    runs[tok] = {"scope": body["scope"], "expires": time.time() + float(body.get("ttl", 360))}
+                    out = {"token": tok}
+                elif body.get("action") == "end":
+                    out = {"ended": runs.pop(body.get("token", ""), None) is not None}
+                else:
+                    out = {"error": "action start (with scope) or end (with token)"}
+            self.reply(json.dumps(out), ctype="application/json")
+            return
+        scope = body.get("scope") if isinstance(body.get("scope"), dict) else None
+        with lock:
+            live = active_runs()
+            tok = body.get("token")
+            if tok:
+                if tok not in live:
+                    self.reply(json.dumps({"ok": False, "error": "this @ai run has finished or its token is unknown"}),
+                               ctype="application/json")
+                    return
+                scope = dict(live[tok]["scope"])
+                body["role"] = scope.get("role") or body.get("role")
+            elif live:
+                self.reply(json.dumps({"ok": False, "error": LOCKED}), ctype="application/json")
+                return
+        result = run_command(body.get("cmd", ""), body.get("args"), float(body.get("timeout", 30)), body.get("role"), scope)
         self.reply(json.dumps(result), ctype="application/json")
 
 
