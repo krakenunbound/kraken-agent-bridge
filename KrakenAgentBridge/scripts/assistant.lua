@@ -500,7 +500,17 @@ function executePlan(p, sWhy)
 		end
 	end
 	p.status = p.failed_step and "failed" or "executed";
-	local sMsg = "AI plan " .. p.id .. (p.failed_step and (": step " .. p.failed_step .. " failed (earlier steps were applied).") or (": " .. #p.steps .. " change(s) applied."));
+	local sMsg;
+	if p.failed_step == 1 then
+		sMsg = "AI plan " .. p.id .. ": step 1 failed, so nothing was changed.";
+	elseif p.failed_step then
+		sMsg = "AI plan " .. p.id .. ": step " .. p.failed_step .. " failed; steps 1 to " .. (p.failed_step - 1) .. " were applied.";
+	else
+		sMsg = "AI plan " .. p.id .. ": " .. #p.steps .. " change(s) applied.";
+	end
+	if p.failed_step and p.results[p.failed_step] then
+		sMsg = sMsg .. " (" .. tostring(p.results[p.failed_step].error) .. ")";
+	end
 	ChatManager.SystemMessage(sMsg);
 	if p.user then
 		Comm.deliverChatMessage({ font = "systemfont", sender = "AI", text = sMsg }, p.user);

@@ -628,9 +628,29 @@ function tCommands.db_list(a, tScope)
 	return { exists = true, children = t };
 end
 
+-- An existing number, string or formatted-text field keeps its type (FGU
+-- refuses a mismatch), and the value is converted to it.
 function tCommands.db_set(a)
-	DB.setValue(a.path, a.type or "string", a.value);
-	return { value = DB.getValue(a.path) };
+	local sType = a.type or "string";
+	local v = a.value;
+	local node = DB.findNode(a.path or "");
+	if node then
+		local sHave = DB.getType(node);
+		if sHave ~= sType and (sHave == "number" or sHave == "string" or sHave == "formattedtext") then
+			sType = sHave;
+		end
+	end
+	if sType == "number" then
+		local n = tonumber(v);
+		if n == nil then
+			return { error = tostring(a.path) .. " is a number field; " .. tostring(v) .. " is not a number" };
+		end
+		v = n;
+	elseif sType == "string" or sType == "formattedtext" then
+		v = tostring(v == nil and "" or v);
+	end
+	DB.setValue(a.path, sType, v);
+	return { value = DB.getValue(a.path), type = sType };
 end
 
 function tCommands.db_delete(a)

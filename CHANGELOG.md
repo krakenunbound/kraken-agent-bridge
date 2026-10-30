@@ -16,6 +16,9 @@
 - **Events:** `fgu_subscribe` watches database paths (FGU wildcards), `fgu_chat_events` streams chat, `fgu_events` reads them (long-poll). Rate-limited so a busy path can't swamp FGU.
 - **Ruleset source tools:** `fgu_source_search` searches the loaded ruleset and every ruleset under it (and extensions) inside the `.pak` files; `fgu_source_read` reads lines or lists files.
 - **In-game commands:** `/agentbridge status`, `stop`, `permissions reset`, `help`.
+- **Fix: curly quotes, dashes and accents from agents arrived garbled** ("Playerâ€™s"). On Windows the MCP server read its input in the ANSI code page instead of UTF-8; it now reads and writes UTF-8.
+- **`fgu_db_set` keeps an existing field's type:** writing `"9"` (string) to a number field stores 9 instead of failing with a type mismatch.
+- **`fgu_slash` sends plain chat lines too** (`@ai ...`, or anything with a space), for the GM or, with `role: client`, a player.
 - **HTTP API:** `GET /events`, `POST /run`, and an optional `scope` on `/cmd`.
 - **Licence:** GPL-3.0 (`LICENSE`). Anyone may use, share and change it; anyone who distributes a changed version must publish its source under the same licence.
 

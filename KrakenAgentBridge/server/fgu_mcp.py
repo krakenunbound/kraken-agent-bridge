@@ -287,7 +287,9 @@ def slash(command, role="host"):
     entry and gives it focus, then the keys are posted. A window with no
     bridge is never typed into (a keystroke once landed in a character's name
     field that way)."""
-    if not command.startswith("/"):
+    # A word without "/" is a command ("reload" -> "/reload"); a line starting
+    # with "@" or containing a space is sent as typed (e.g. "@ai what is ...").
+    if not command.startswith("/") and not command.startswith("@") and " " not in command.strip():
         command = "/" + command
     if not role_state(role).get("connected"):
         return {"ok": False, "error": f"the {role} bridge is not connected, so its chat entry cannot be focused; "
@@ -516,7 +518,7 @@ TOOLS = [
     },
     {
         "name": "fgu_slash",
-        "description": "Type a chat line into Fantasy Grounds as the GM, e.g. '/siegetest' or '/die 1d20'. Keystrokes are posted to the window without taking focus. Built-in commands work too.",
+        "description": "Type a chat line into Fantasy Grounds (as the GM, or as the player with role client), e.g. '/siegetest', '/die 1d20', or a plain line such as '@ai what does prone do?'. Keystrokes are posted to the window without taking focus. Built-in commands work too.",
         "inputSchema": {"type": "object", "properties": {"role": ROLE_PROP, "command": {"type": "string"}}, "required": ["command"]},
     },
     {
@@ -821,6 +823,13 @@ def handle(msg):
 
 
 def main():
+    # MCP is UTF-8. On Windows Python would read stdin as the ANSI code page,
+    # turning an agent's "Player’s" into "Playerâ€™s" before it reached FGU.
+    for stream in (sys.stdin, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     for line in sys.stdin:
         line = line.strip()
         if not line:
