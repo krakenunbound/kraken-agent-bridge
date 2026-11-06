@@ -25,7 +25,7 @@ DATA_FOLDER = os.environ.get(
     "FGU_DATA_FOLDER",
     os.path.join(os.environ.get("APPDATA", ""), "SmiteWorks", "Fantasy Grounds"),
 )
-SERVER_INFO = {"name": "kraken-agent-bridge", "version": "1.1.0"}
+SERVER_INFO = {"name": "kraken-agent-bridge", "version": "1.1.1"}
 
 # Set by fgu_listener.py when it starts an agent for an @ai question: every
 # command then carries the asker's scope, and the extension limits it to what
@@ -154,18 +154,24 @@ def console_tail(lines=60, contains=None, errors_only=False, since_marker=None):
     return {"path": path, "lines": rows[-lines:]}
 
 
-def chat_tail(lines=20, campaign_folder=None):
-    """Last chat lines from <campaign>/chatlog.html, as plain text."""
+def chat_tail(lines=20, campaign_folder=None, role="host"):
+    """Last chat lines from <campaign>/chatlog.html of the copy playing role, as plain text."""
     import html
     import re
     folder = campaign_folder
     if not folder:
         try:
-            folder = (role_state("host").get("fg") or {}).get("campaign_folder")
+            folder = (role_state(role).get("fg") or {}).get("campaign_folder")
         except Exception:
             folder = None
     if not folder:
-        return {"error": "campaign folder unknown: load a campaign with the Kraken Agent Bridge extension first"}
+        # Never fall back to another copy's folder: with two campaigns open that
+        # silently returned the wrong chat (issue #1).
+        if (role or "host") == "client":
+            return {"error": "a player copy has no campaign folder to read chatlog.html from; read the GM's chat (role host) "
+                             "or turn on fgu_chat_events with role client"}
+        return {"error": f"campaign folder unknown for role {role}: load a campaign with the Kraken Agent Bridge extension "
+                         "in that copy first (fgu_status lists the connected copies)"}
     path = os.path.join(folder, "chatlog.html")
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -767,7 +773,7 @@ def call_tool(name, a):
     if name == "fgu_slash":
         return slash(a.get("command", ""), role)
     if name == "fgu_chat_log":
-        return chat_tail(a.get("lines", 20))
+        return chat_tail(a.get("lines", 20), role=role)
     if name == "fgu_console":
         return console_tail(a.get("lines", 60), a.get("contains"), a.get("errors_only", False), a.get("since_marker"))
     timeout = float(a.pop("timeout", 30)) if "timeout" in a else 30

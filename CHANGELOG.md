@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.1 (2026-11-06)
+
+- **Fix: `fgu_chat_log` ignored `role`** and always read the first GM copy's chat, so with two campaigns open `role: "host2"` silently returned the wrong campaign's log ([#1](https://github.com/krakenunbound/kraken-agent-bridge/issues/1), reported by @mattabate). It now reads the chat of the copy you name, and says so plainly when that copy has no campaign folder (a player copy, or a channel with no FGU connected) instead of falling back to another one.
+
 ## v1.1.0 (2026-10-30)
 
 **The @ai chat assistant, batches, handles, events and source search.** Still free, now under the GPL-3.0 licence.
